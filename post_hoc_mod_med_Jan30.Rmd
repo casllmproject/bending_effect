@@ -1,0 +1,360 @@
+---
+title: "main_analysis_fre"
+author: "yy_tw"
+date: "2025-12-18"
+output: html_document
+---
+# 0. Data preparation.
+```{r}
+# Load packages
+library(dplyr)
+library(readr)
+library(car)
+library(lmtest)
+library(sandwich)
+library(brms)
+library(mediation)
+library(emmeans)
+library(ggplot2)
+
+
+# data reading
+dat <- read_csv("Final_Cleaned_Dec18_FULL_CODED_USER.csv") 
+
+# Variable preparation
+dat <- dat %>%
+  mutate(
+    DISP = factor(DISP, levels = c(0, 1, 2, 3)),
+    female = factor(female, levels = c(0, 1)),
+    male = factor(male, levels = c(0, 1)),
+    dem = factor(dem, levels = c(0, 1)),
+    rep = factor(rep, levels = c(0, 1)),
+    ind = factor(ind, levels = c(0, 1)),
+    POP = as.numeric(POP),
+    CPS_P = as.numeric(CPS_P),
+    CII_P = as.numeric(CII_P),
+    CPP1 = as.numeric(CPP1),
+    CPP2 = as.numeric(CPP2),
+    CPP3 = as.numeric(CPP3),
+    WCCS = as.numeric(WCCS),
+    PAPA = as.numeric(PAPA),
+    DR = as.numeric(DR),
+    WCCP = as.numeric(WCCP),
+    DQPD = as.numeric(DQPD),
+    PI = as.numeric(PI),
+    EPE = as.numeric(EPE),
+    IPE = as.numeric(IPE),
+    AICOP = as.numeric(AICOP)
+  )
+
+# Set control group as reference
+dat$DISP <- relevel(dat$DISP, ref = "0")
+```
+
+```{r}
+# ==========================================================
+# 1. DEFINE MODERATOR LEVELS (FOR PROBING)
+# ==========================================================
+# We define "Low" as Mean - 1SD and "High" as Mean + 1SD.
+aicop_mean <- mean(dat$AICOP, na.rm = TRUE)
+aicop_sd   <- sd(dat$AICOP, na.rm = TRUE)
+
+cov_low  <- list(AICOP = aicop_mean - aicop_sd)
+cov_high <- list(AICOP = aicop_mean + aicop_sd)
+
+# ==========================================================
+# 2. BUILD BASE MODELS & ADD INTERACTIONS
+# ==========================================================
+
+# --- A. Mediator Model ---
+# Base model
+model_1 <- lm(PAPA ~ DISP + female + EPE + IPE + PI, data = dat)
+
+# Moderated Mediator Model (Path A): Add DISP * AICOP interaction
+model_1_mod <- update(model_1, . ~ . + DISP * AICOP)
+
+
+# --- B. Outcome Models ---
+# First, we define the base models exactly as you provided:
+model_2_2 <- glm(CPS_P ~ DISP + PAPA + female + EPE + IPE + PI, 
+                 data = dat, family = binomial)
+model_3   <- lm(DR ~ DISP + PAPA + female + EPE + IPE + PI, data = dat)
+model_4   <- lm(WCCP ~ DISP + PAPA + female + EPE + IPE + PI, data = dat)
+model_5   <- glm(WCCS ~ DISP + PAPA + female + EPE + IPE + PI, 
+                 data = dat, family = binomial)
+model_6   <- lm(DQPD ~ DISP + PAPA + female + EPE + IPE + PI, data = dat)
+
+# Now, we update them to include Moderation (Path B & C'):
+# Adds interactions: Treatment*Moderator (DISP*AICOP) and Mediator*Moderator (PAPA*AICOP)
+model_2_mod <- update(model_2_2, . ~ . + DISP * AICOP + PAPA * AICOP)
+model_3_mod <- update(model_3,   . ~ . + DISP * AICOP + PAPA * AICOP)
+model_4_mod <- update(model_4,   . ~ . + DISP * AICOP + PAPA * AICOP)
+model_5_mod <- update(model_5,   . ~ . + DISP * AICOP + PAPA * AICOP)
+model_6_mod <- update(model_6,   . ~ . + DISP * AICOP + PAPA * AICOP)
+
+# ==========================================================
+# 3. SETUP LISTS FOR THE LOOP
+# ==========================================================
+
+# Define the treatment pairs
+comparisons <- list(
+  c("0", "1"), c("0", "2"), c("0", "3"),
+  c("1", "2"), c("1", "3"), c("2", "3")
+)
+
+# Define the list of UPDATED (moderated) outcome models
+outcome_models <- list(
+  "CPS_P"  = model_2_mod,
+  "DR"     = model_3_mod,
+  "WCCP"   = model_4_mod,
+  "WCCS"   = model_5_mod,
+  "DQPD"   = model_6_mod
+)
+
+# ==========================================================
+# 4. LOOP: MODERATED MEDIATION ANALYSIS
+# ==========================================================
+
+for (outcome_name in names(outcome_models)) {
+  
+  cat("\n#############################################################\n")
+  cat("  MODERATED MEDIATION FOR OUTCOME:", outcome_name, "\n")
+  cat("#############################################################\n")
+  
+  current_y_model <- outcome_models[[outcome_name]]
+  
+  for (pair in comparisons) {
+    c_val <- pair[1]
+    t_val <- pair[2]
+    
+    cat(
+      "\n--- Pair: DISP", t_val, "(Treat) vs. DISP", c_val, "(Control) ---\n"
+    )
+    
+    # Force mediator model to use exactly the same data rows as the outcome model
+    # (Crucial for handling missing data correctly in the loop)
+    m_model_refit <- update(model_1_mod, data = model.frame(current_y_model))
+    
+    # --- RUN 1: Low AICOP ---
+    cat("   > Probing: Low AICOP (Mean - 1SD)...\n")
+    med_out_low <- mediate(
+      model.m = m_model_refit,
+      model.y = current_y_model,
+      treat = "DISP",
+      mediator = "PAPA",
+      control.value = c_val,
+      treat.value = t_val,
+      covariates = cov_low,  # Sets AICOP to Low
+      boot = TRUE,
+      sims = 1000            # Increase to 5000 for final results
+    )
+    
+    # Print ACME (Indirect Effect) for Low Group
+    cat("     [Low AICOP] ACME:", sprintf("%.4f", med_out_low$d0), 
+        "| p-value:", med_out_low$d0.p, "\n")
+    
+    # --- RUN 2: High AICOP ---
+    cat("   > Probing: High AICOP (Mean + 1SD)...\n")
+    med_out_high <- mediate(
+      model.m = m_model_refit,
+      model.y = current_y_model,
+      treat = "DISP",
+      mediator = "PAPA",
+      control.value = c_val,
+      treat.value = t_val,
+      covariates = cov_high, # Sets AICOP to High
+      boot = TRUE,
+      sims = 1000
+    )
+    
+    # Print ACME (Indirect Effect) for High Group
+    cat("     [High AICOP] ACME:", sprintf("%.4f", med_out_high$d0), 
+        "| p-value:", med_out_high$d0.p, "\n")
+  }
+}
+```
+
+
+```{r}
+# ==========================================================
+# 1. DEFINE MODERATOR LEVELS (FOR PROBING)
+# ==========================================================
+# We define "Low" as Mean - 1SD and "High" as Mean + 1SD.
+aicop_mean <- mean(dat$AICOP, na.rm = TRUE)
+aicop_sd   <- sd(dat$AICOP, na.rm = TRUE)
+
+cov_low  <- list(AICOP = aicop_mean - aicop_sd)
+cov_high <- list(AICOP = aicop_mean + aicop_sd)
+
+# ==========================================================
+# 2. BUILD BASE MODELS & ADD INTERACTIONS
+# ==========================================================
+
+# --- A. Mediator Model ---
+# Base model
+model_1 <- lm(PAPA ~ DISP + female + EPE + IPE + PI, data = dat)
+
+# Moderated Mediator Model (Path A): Add DISP * AICOP interaction
+model_1_mod <- update(model_1, . ~ . + DISP * AICOP)
+
+
+# --- B. Outcome Models ---
+# First, we define the base models exactly as you provided:
+model_2_2 <- glm(CPS_P ~ DISP + PAPA + female + EPE + IPE + PI, 
+                 data = dat, family = binomial)
+model_3   <- lm(DR ~ DISP + PAPA + female + EPE + IPE + PI, data = dat)
+model_4   <- lm(WCCP ~ DISP + PAPA + female + EPE + IPE + PI, data = dat)
+model_5   <- glm(WCCS ~ DISP + PAPA + female + EPE + IPE + PI, 
+                 data = dat, family = binomial)
+model_6   <- lm(DQPD ~ DISP + PAPA + female + EPE + IPE + PI, data = dat)
+
+# Now, we update them to include Moderation (Path B & C'):
+# Adds interactions: Treatment*Moderator (DISP*AICOP) and Mediator*Moderator (PAPA*AICOP)
+model_2_mod <- update(model_2_2, . ~ . + DISP * AICOP + PAPA * AICOP)
+model_3_mod <- update(model_3,   . ~ . + DISP * AICOP + PAPA * AICOP)
+model_4_mod <- update(model_4,   . ~ . + DISP * AICOP + PAPA * AICOP)
+model_5_mod <- update(model_5,   . ~ . + DISP * AICOP + PAPA * AICOP)
+model_6_mod <- update(model_6,   . ~ . + DISP * AICOP + PAPA * AICOP)
+
+# ==========================================================
+# 3. SETUP LISTS FOR THE LOOP
+# ==========================================================
+
+# Define the treatment pairs
+comparisons <- list(
+  c("0", "1"), c("0", "2"), c("0", "3"),
+  c("1", "2"), c("1", "3"), c("2", "3")
+)
+
+# Define the list of UPDATED (moderated) outcome models
+outcome_models <- list(
+  "CPS_P"  = model_2_mod,
+  "DR"     = model_3_mod,
+  "WCCP"   = model_4_mod,
+  "WCCS"   = model_5_mod,
+  "DQPD"   = model_6_mod
+)
+
+# ==========================================================
+# 4. LOOP: MODERATED MEDIATION ANALYSIS (UPDATED)
+# ==========================================================
+
+for (outcome_name in names(outcome_models)) {
+  
+  cat("\n#############################################################\n")
+  cat("  MODERATED MEDIATION FOR OUTCOME:", outcome_name, "\n")
+  cat("#############################################################\n")
+  
+  current_y_model <- outcome_models[[outcome_name]]
+  
+  for (pair in comparisons) {
+    c_val <- pair[1]
+    t_val <- pair[2]
+    
+    cat("\n-------------------------------------------------------------\n")
+    cat(" PAIR: DISP", t_val, "(Treat) vs. DISP", c_val, "(Control)\n")
+    cat("-------------------------------------------------------------\n")
+    
+    # 1. Refit Mediator Model to match Outcome Model data
+    m_model_refit <- update(model_1_mod, data = model.frame(current_y_model))
+    
+    # --- RUN 1: Low AICOP ---
+    cat("  > Calculating effects for: Low AICOP (Mean - 1SD)...\n")
+    med_out_low <- mediate(
+      model.m = m_model_refit,
+      model.y = current_y_model,
+      treat = "DISP",
+      mediator = "PAPA",
+      control.value = c_val,
+      treat.value = t_val,
+      covariates = cov_low,
+      boot = TRUE,
+      sims = 1000 # Increase to 5000 for final publication
+    )
+    
+    # Summary for Low
+    sum_low <- summary(med_out_low)
+    
+    # --- RUN 2: High AICOP ---
+    cat("  > Calculating effects for: High AICOP (Mean + 1SD)...\n")
+    med_out_high <- mediate(
+      model.m = m_model_refit,
+      model.y = current_y_model,
+      treat = "DISP",
+      mediator = "PAPA",
+      control.value = c_val,
+      treat.value = t_val,
+      covariates = cov_high,
+      boot = TRUE,
+      sims = 1000
+    )
+    
+    # Summary for High
+    sum_high <- summary(med_out_high)
+    
+    # ==========================================================
+    # PRINT RESULTS TABLE
+    # ==========================================================
+    cat("\n  [RESULTS TABLE]\n")
+    cat(sprintf("  %-10s | %-10s | %-10s | %-10s\n", "Effect", "Metric", "Estimate", "p-value"))
+    cat("  --------------------------------------------------------\n")
+    
+    # LOW Results
+    cat(sprintf("  %-10s | %-10s | %-10s | %s\n", "LOW AICOP", "ACME", 
+                sprintf("%.4f", sum_low$d.avg), sprintf("%.3f", sum_low$d.avg.p)))
+    cat(sprintf("  %-10s | %-10s | %-10s | %s\n", "", "ADE", 
+                sprintf("%.4f", sum_low$z.avg), sprintf("%.3f", sum_low$z.avg.p)))
+    cat(sprintf("  %-10s | %-10s | %-10s | %s\n", "", "TOTAL", 
+                sprintf("%.4f", sum_low$tau.coef), sprintf("%.3f", sum_low$tau.p)))
+    
+    cat("  --------------------------------------------------------\n")
+    
+    # HIGH Results
+    cat(sprintf("  %-10s | %-10s | %-10s | %s\n", "HIGH AICOP", "ACME", 
+                sprintf("%.4f", sum_high$d.avg), sprintf("%.3f", sum_high$d.avg.p)))
+    cat(sprintf("  %-10s | %-10s | %-10s | %s\n", "", "ADE", 
+                sprintf("%.4f", sum_high$z.avg), sprintf("%.3f", sum_high$z.avg.p)))
+    cat(sprintf("  %-10s | %-10s | %-10s | %s\n", "", "TOTAL", 
+                sprintf("%.4f", sum_high$tau.coef), sprintf("%.3f", sum_high$tau.p)))
+    
+    cat("  --------------------------------------------------------\n")
+    
+    # ==========================================================
+    # FORMAL TEST OF MODERATED MEDIATION (MANUAL BOOTSTRAP)
+    # ==========================================================
+    cat("\n  > Formal Test: Difference (High ACME - Low ACME)...\n")
+    
+    # 1. Extract the bootstrap distributions of the ACME (Average Causal Mediation Effect)
+    #    We use d.avg.sims which captures the average of treated/control mediation
+    acme_low_sims  <- med_out_low$d.avg.sims
+    acme_high_sims <- med_out_high$d.avg.sims
+    
+    # 2. Calculate the difference distribution
+    #    (High AICOP Effect - Low AICOP Effect)
+    diff_sims <- acme_high_sims - acme_low_sims
+    
+    # 3. Calculate statistics for the difference
+    diff_est <- mean(diff_sims)
+    diff_ci  <- quantile(diff_sims, c(0.025, 0.975)) # 95% CI
+    
+    # 4. Calculate P-value for the difference
+    #    This checks the proportion of the distribution that overlaps zero
+    #    (Standard two-tailed bootstrap p-value calculation)
+    p_val_diff <- 2 * min(mean(diff_sims > 0), mean(diff_sims < 0))
+    
+    # 5. Print Results
+    cat(sprintf("  Difference Estimate: %.4f\n", diff_est))
+    cat(sprintf("  95%% CI: [%.4f, %.4f]\n", diff_ci[1], diff_ci[2]))
+    cat(sprintf("  P-value: %.3f\n", p_val_diff))
+    
+    # Interpretation Helper
+    if (p_val_diff < 0.05) {
+      cat("  [RESULT]: Significant Moderated Mediation (The ACME differs significantly between Low and High AICOP).\n")
+    } else {
+      cat("  [RESULT]: No Significant Moderated Mediation (Difference is not statistically significant).\n")
+    }
+
+    cat("\n")
+  }
+}
+```

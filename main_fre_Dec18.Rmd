@@ -1,0 +1,583 @@
+---
+title: "main_analysis_fre"
+author: "yy_tw"
+date: "2025-12-18"
+output: html_document
+---
+# 0. Data preparation.
+```{r}
+# Load packages
+library(dplyr)
+library(readr)
+library(car)
+library(lmtest)
+library(sandwich)
+library(brms)
+library(mediation)
+library(emmeans)
+library(ggplot2)
+
+
+# data reading
+dat <- read_csv("Final_Cleaned_Dec18_FULL_CODED_USER.csv") 
+
+# Variable preparation
+dat <- dat %>%
+  mutate(
+    DISP = factor(DISP, levels = c(0, 1, 2, 3)),
+    female = factor(female, levels = c(0, 1)),
+    male = factor(male, levels = c(0, 1)),
+    dem = factor(dem, levels = c(0, 1)),
+    rep = factor(rep, levels = c(0, 1)),
+    ind = factor(ind, levels = c(0, 1)),
+    POP = as.numeric(POP),
+    CPS_P = as.numeric(CPS_P),
+    CII_P = as.numeric(CII_P),
+    CPP1 = as.numeric(CPP1),
+    CPP2 = as.numeric(CPP2),
+    CPP3 = as.numeric(CPP3),
+    WCCS = as.numeric(WCCS),
+    PAPA = as.numeric(PAPA),
+    DR = as.numeric(DR),
+    WCCP = as.numeric(WCCP),
+    DQPD = as.numeric(DQPD),
+    PI = as.numeric(PI),
+    EPE = as.numeric(EPE),
+    IPE = as.numeric(IPE),
+    AICOP = as.numeric(AICOP)
+  )
+
+# Set control group as reference
+dat$DISP <- relevel(dat$DISP, ref = "0")
+```
+
+# 1. DISP → PAPA (continuous outcome) / Frequentist (ANCOVA)
+```{r}
+model_1 <- lm(PAPA ~ DISP + female + EPE + IPE + PI, data = dat)
+summary(model_1)
+# Pairwise comparisons for Model 1
+emmeans(model_1, pairwise ~ DISP)$contrasts |>
+  summary(infer = c(TRUE, TRUE), level = 0.95)
+```
+
+```{r}
+#Visualization model_1
+emm_disp <- emmeans(model_1, ~ DISP)
+
+emm_df <- as.data.frame(emm_disp)
+
+ggplot(emm_df, aes(x = DISP, y = emmean)) +
+  geom_point(size = 3) +
+  geom_errorbar(
+    aes(ymin = lower.CL, ymax = upper.CL),
+    width = 0.15
+  ) +
+  labs(
+    x = "DISP condition",
+    y = "Adjusted mean of PAPR"
+  ) +
+  theme_classic()
+```
+```{r}
+#pairwise visualization of model_1.
+contrast_df_1 <- as.data.frame(
+  emmeans(model_1, pairwise ~ DISP)$contrasts |>
+    summary(infer = c(TRUE, TRUE), level = 0.95)
+)
+
+ggplot(
+  data = contrast_df_1,
+  aes(x = contrast, y = estimate)
+) +
+  geom_point(size = 3) +
+  geom_errorbar(
+    aes(ymin = lower.CL, ymax = upper.CL),
+    width = 0.1
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  coord_flip() +
+  labs(
+    x = "DISP contrast",
+    y = "Difference in adjusted mean PAPR"
+  ) +
+  theme_classic()
+```
+
+# 2. DISP → POP (binary) / Frequentist (logistic regression)
+```{r}
+#POP
+model_2_1 <- glm(POP ~ DISP + PAPA + female + EPE + IPE + PI, 
+               data = dat, family = binomial)
+summary(model_2_1)
+# Pairwise comparisons (Results are Odds Ratios if type="response" isn't strictly set, here log-odds)
+emmeans(model_2_1, pairwise ~ DISP)$contrasts
+
+#CPS
+model_2_2 <- glm(CPS_P ~ DISP + PAPA + female + EPE + IPE + PI, 
+               data = dat, family = binomial)
+summary(model_2_2)
+# Pairwise comparisons (Results are Odds Ratios if type="response" isn't strictly set, here log-odds)
+emmeans(model_2_2, pairwise ~ DISP)$contrasts
+
+#CII
+model_2_3 <- glm(CII_P ~ DISP + PAPA + female + EPE + IPE + PI, 
+               data = dat, family = binomial)
+summary(model_2_3)
+# Pairwise comparisons (Results are Odds Ratios if type="response" isn't strictly set, here log-odds)
+emmeans(model_2_3, pairwise ~ DISP)$contrasts
+```
+
+# 2-1. DISP → POP (continuous) / Frequentist (logistic regression)
+```{r}
+#CPP1
+model_2_4 <- lm(CPP1 ~ DISP + PAPA + female + EPE + IPE + PI, data = dat)
+summary(model_2_4)
+# Pairwise comparisons for Model 1
+emmeans(model_2_4, pairwise ~ DISP)$contrasts
+
+#CPP2
+model_2_5 <- lm(CPP2 ~ DISP + PAPA + female + EPE + IPE + PI, data = dat)
+summary(model_2_5)
+# Pairwise comparisons for Model 1
+emmeans(model_2_5, pairwise ~ DISP)$contrasts
+
+#CPP2
+model_2_6 <- lm(CPP3 ~ DISP + PAPA + female + EPE + IPE + PI, data = dat)
+summary(model_2_6)
+# Pairwise comparisons for Model 1
+emmeans(model_2_6, pairwise ~ DISP)$contrasts
+```
+
+# 3. DISP → DR (continuous)
+```{r}
+model_3 <- lm(DR ~ DISP + PAPA + female + EPE + IPE + PI, data = dat)
+summary(model_3)
+emmeans(model_3, pairwise ~ DISP)$contrasts
+```
+
+# 4. DISP → WCCP
+```{r}
+model_4 <- lm(WCCP ~ DISP + PAPA + female + EPE + IPE + PI, data = dat)
+summary(model_4)
+emmeans(model_4, pairwise ~ DISP)$contrasts
+```
+
+#. 5. DISP → WCCS (binary)
+```{r}
+model_5 <- glm(WCCS ~ DISP + PAPA + female + EPE + IPE + PI, 
+               data = dat, family = binomial)
+summary(model_5)
+emmeans(model_5, pairwise ~ DISP)$contrasts |>
+  summary(infer = c(TRUE, TRUE), level = 0.95)
+```
+
+```{r}
+#Visualization model_5
+emm_disp_5 <- emmeans(
+  model_5,
+  ~ DISP,
+  type = "response"
+)
+
+emm_df_5 <- as.data.frame(emm_disp_5)
+
+ggplot(
+  data = emm_df_5,
+  aes(x = DISP, y = prob)
+) +
+  geom_point(size = 3) +
+  geom_errorbar(
+    aes(ymin = asymp.LCL, ymax = asymp.UCL),
+    width = 0.15
+  ) +
+  labs(
+    x = "DISP condition",
+    y = "Predicted probability of WCCS"
+  ) +
+  theme_classic()
+```
+```{r}
+# Pairwise visualization for model_5.
+# Compute pairwise contrasts with response scale
+contrast_disp_5 <- emmeans(model_5, pairwise ~ DISP, type = "response")$contrasts
+
+# Convert to data frame with 95% CI
+contrast_df_5 <- as.data.frame(
+  summary(contrast_disp_5, infer = c(TRUE, TRUE), level = 0.95)
+)
+
+# Plot odds ratios for pairwise contrasts
+ggplot(
+  data = contrast_df_5,
+  aes(x = contrast, y = odds.ratio)
+) +
+  geom_point(size = 3) +
+  geom_errorbar(
+    aes(ymin = asymp.LCL, ymax = asymp.UCL),
+    width = 0.1
+  ) +
+  geom_hline(yintercept = 1, linetype = "dashed") +  # 1 = null effect
+  coord_flip() +
+  labs(
+    x = "DISP contrast",
+    y = "Odds ratio of WCCS"
+  ) +
+  theme_classic()
+```
+```{r}
+##Flipped plot
+# 1. Use 'revpairwise' to flip direction (e.g., 3-0 instead of 0-3)
+# 'type = "response"' ensures we get Odds Ratios
+contrast_disp_5 <- emmeans(model_5, revpairwise ~ DISP, type = "response")$contrasts
+
+# 2. Convert to data frame with CI
+contrast_df_5 <- as.data.frame(
+  summary(contrast_disp_5, infer = c(TRUE, TRUE), level = 0.95)
+)
+
+# 3. Clean labels: Replace " / " with " - "
+contrast_df_5$contrast <- gsub(" / ", " - ", contrast_df_5$contrast)
+
+# 4. Plot
+ggplot(
+  data = contrast_df_5,
+  aes(x = contrast, y = odds.ratio)
+) +
+  geom_point(size = 3) +
+  geom_errorbar(
+    aes(ymin = asymp.LCL, ymax = asymp.UCL),
+    width = 0.1
+  ) +
+  # Null effect for Odds Ratios is 1
+  geom_hline(yintercept = 1, linetype = "dashed", color = "red") + 
+  coord_flip() +
+  labs(
+    x = "DISP Contrast (Reversed)",
+    y = "Odds Ratio of WCCS"
+  ) +
+  theme_classic()
+```
+
+
+#. 6. DISP → DQPD
+```{r}
+model_6 <- lm(DQPD ~ DISP + PAPA + female + EPE + IPE + PI, data = dat)
+summary(model_6)
+emmeans(model_6, pairwise ~ DISP)$contrasts|>
+  summary(infer = c(TRUE, TRUE), level = 0.95)
+```
+
+```{r}
+# Visualization model_6.
+emm_disp_6 <- emmeans(model_6, ~ DISP)
+
+emm_df_6 <- as.data.frame(emm_disp_6)
+
+ggplot(
+  data = emm_df_6,
+  aes(x = DISP, y = emmean)
+) +
+  geom_point(size = 3) +
+  geom_errorbar(
+    aes(ymin = lower.CL, ymax = upper.CL),
+    width = 0.15
+  ) +
+  labs(
+    x = "DISP condition",
+    y = "Adjusted mean of DQPD"
+  ) +
+  theme_classic()
+```
+
+```{r}
+#pairwise visualization of model_6.
+contrast_df_6 <- as.data.frame(
+  emmeans(model_6, pairwise ~ DISP)$contrasts |>
+    summary(infer = c(TRUE, TRUE), level = 0.95)
+)
+
+ggplot(
+  data = contrast_df_6,
+  aes(x = contrast, y = estimate)
+) +
+  geom_point(size = 3) +
+  geom_errorbar(
+    aes(ymin = lower.CL, ymax = upper.CL),
+    width = 0.1
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  coord_flip() +
+  labs(
+    x = "DISP contrast",
+    y = "Difference in adjusted mean DQPD"
+  ) +
+  theme_classic()
+```
+
+```{r}
+###Flipped plot.
+# 1. Use 'revpairwise' to flip the subtraction direction
+contrast_df_6 <- as.data.frame(
+  emmeans(model_6, revpairwise ~ DISP)$contrasts |>
+    summary(infer = c(TRUE, TRUE), level = 0.95)
+)
+
+# 2. (Optional) Clean up the label if it uses "/" instead of "-"
+contrast_df_6$contrast <- gsub(" / ", " - ", contrast_df_6$contrast)
+
+# 3. Plot
+ggplot(
+  data = contrast_df_6,
+  aes(x = contrast, y = estimate)
+) +
+  geom_point(size = 3) +
+  geom_errorbar(
+    aes(ymin = lower.CL, ymax = upper.CL),
+    width = 0.1
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  coord_flip() +
+  labs(
+    x = "DISP Contrast (Reversed)",
+    y = "Difference in Adjusted Mean DQPD"
+  ) +
+  theme_classic()
+```
+
+
+# 7. Mediation analyses.
+```{r}
+# 1. Define the treatment pairs
+# Format: c(Control_Value, Treatment_Value)
+comparisons <- list(
+  c("0", "1"), # Control vs T1
+  c("0", "2"), # Control vs T2
+  c("0", "3"), # Control vs T3
+  c("1", "2"), # T1 vs T2
+  c("1", "3"), # T1 vs T3
+  c("2", "3")  # T2 vs T3
+)
+
+# 2. Define Outcome Models and their Names for the loop
+outcome_models <- list(
+  "CPS_P"  = model_2_2,
+  "DR"   = model_3,
+  "WCCP" = model_4,
+  "WCCS" = model_5,
+  "DQPD" = model_6
+)
+```
+
+```{r}
+# 3. Loop through Outcomes and Pairs
+# This will print the ACME (Average Causal Mediation Effect) for every pair.
+for (outcome_name in names(outcome_models)) {
+  
+  cat("\n=============================================\n")
+  cat("  MEDIATION ANALYSIS FOR OUTCOME:", outcome_name, "\n")
+  cat("=============================================\n")
+  
+  current_y_model <- outcome_models[[outcome_name]]
+  
+  for (pair in comparisons) {
+    c_val <- pair[1]
+    t_val <- pair[2]
+    
+    cat(
+      "\n--- Comparing DISP", t_val,
+      "(Treat) vs. DISP", c_val,
+      "(Control) ---\n"
+    )
+    
+    # Force mediator model to follow outcome model's observations
+    m_model_refit <- lm(
+      PAPA ~ DISP + female + EPE + IPE + PI,
+      data = model.frame(current_y_model)
+    )
+    
+    med_out <- mediate(
+      model.m = m_model_refit,
+      model.y = current_y_model,
+      treat = "DISP",
+      mediator = "PAPA",
+      control.value = c_val,
+      treat.value = t_val,
+      boot = TRUE,
+      sims = 5000
+    )
+    
+    print(summary(med_out))
+  }
+}
+```
+
+# 8. IF WILLINGNESS IS A MEDIATOR.
+```{r}
+mediation_vars <- c(
+  # treatment
+  "DISP",
+
+  # mediators
+  "PAPA",
+
+  # outcomes (all of them)
+  "DR", "CII_P", "WCCP", "WCCS", "DQPD",
+
+  # covariates
+  "female", "EPE", "IPE", "PI"
+)
+```
+
+```{r}
+dat_med <- dat %>%
+  dplyr::select(all_of(mediation_vars)) %>%
+  na.omit()
+```
+
+```{r}
+# 1. Define treatment pairs
+comparisons <- list(
+  c("0", "1"),
+  c("0", "2"),
+  c("0", "3"),
+  c("1", "2"),
+  c("1", "3"),
+  c("2", "3")
+)
+
+# 2. Create a complete-case dataset for this mediation
+dat_med <- dat %>%
+  dplyr::select(DISP, PAPA, WCCS, DQPD, female, EPE, IPE, PI) %>%
+  na.omit()
+
+# 3. Loop through pairwise DISP contrasts
+for (pair in comparisons) {
+  c_val <- pair[1]
+  t_val <- pair[2]
+  
+  cat("\n--- DISP", t_val, "(Treat) vs DISP", c_val, "(Control) ---\n")
+  
+  # Mediator model: WCCS ~ DISP + covariates
+  model_m <- lm(
+    WCCS ~ DISP + PAPA + female + EPE + IPE + PI,
+    data = dat_med
+  )
+  
+  # Outcome model: DQPD ~ DISP + WCCS + covariates
+  model_y <- lm(
+    DQPD ~ DISP + PAPA + WCCS + female + EPE + IPE + PI,
+    data = dat_med
+  )
+  
+  # Mediation
+  med_out <- mediate(
+    model.m = model_m,
+    model.y = model_y,
+    treat = "DISP",
+    mediator = "WCCS",
+    control.value = c_val,
+    treat.value = t_val,
+    boot = TRUE,
+    sims = 5000
+  )
+  
+  print(summary(med_out))
+}
+```
+
+
+#. PAPA plots generation
+```{r}
+# Logistic model for WCCS
+model_WCCS <- glm(WCCS ~ PAPA + DISP + female + EPE + IPE + PI,
+                  data = dat, family = binomial)
+
+# Linear models for continuous outcomes
+model_DQPD <- lm(DQPD ~ PAPA + DISP + female + EPE + IPE + PI, data = dat)
+model_WCCP <- lm(WCCP ~ PAPA + DISP + female + EPE + IPE + PI, data = dat)
+model_DR   <- lm(DR ~ PAPA + DISP + female + EPE + IPE + PI, data = dat)
+```
+
+```{r}
+models <- list(
+  WCCS = model_WCCS,
+  DQPD = model_DQPD,
+  WCCP = model_WCCP,
+  DR   = model_DR
+)
+
+lapply(models, summary)
+```
+
+```{r}
+# Create a grid of PAPA values for plotting
+papa_seq <- seq(
+  min(dat$PAPA, na.rm = TRUE),
+  max(dat$PAPA, na.rm = TRUE),
+  length.out = 50
+)
+
+# Function to get predicted values for linear models
+pred_lin <- function(model, outcome_name) {
+  emm <- emmeans(model, ~ PAPA, at = list(PAPA = papa_seq))
+  df <- as.data.frame(emm)
+  df$outcome <- outcome_name
+  return(df)
+}
+
+# Function to get predicted probabilities for logistic model
+pred_logit <- function(model, outcome_name) {
+  emm <- emmeans(model, ~ PAPA, at = list(PAPA = papa_seq), type = "response")
+  df <- as.data.frame(emm)
+  df$outcome <- outcome_name
+  return(df)
+}
+
+# Generate data frames
+df_WCCS  <- pred_logit(model_WCCS, "WCCS")
+df_DQPD  <- pred_lin(model_DQPD, "DQPD")
+df_WCCP  <- pred_lin(model_WCCP, "WCCP")
+df_DR    <- pred_lin(model_DR, "DR")
+```
+
+```{r}
+#Combine plots
+df_all <- rbind(df_WCCS, df_DQPD, df_WCCP, df_DR)
+```
+
+```{r}
+ggplot(df_all, aes(x = PAPA)) +
+  geom_line(aes(y = ifelse(!is.na(prob), prob, emmean)), color = "blue") +
+  geom_ribbon(aes(
+    ymin = ifelse(!is.na(prob), asymp.LCL, lower.CL),
+    ymax = ifelse(!is.na(prob), asymp.UCL, upper.CL)
+  ), alpha = 0.2, fill = "blue") +
+  facet_wrap(~ outcome, scales = "free_y") +
+  labs(
+    x = "PAPR",
+    y = "Predicted outcome / probability",
+    title = "Relationship between PAPR and Outcomes"
+  ) +
+  theme_classic()
+```
+
+```{r}
+ggplot(df_all, aes(x = PAPA)) +
+  # Main line
+  geom_line(aes(y = ifelse(!is.na(prob), prob, emmean)), color = "blue") +
+  # Confidence intervals
+  geom_ribbon(aes(
+    ymin = ifelse(!is.na(prob), asymp.LCL, lower.CL),
+    ymax = ifelse(!is.na(prob), asymp.UCL, upper.CL)
+  ), alpha = 0.2, fill = "blue") +
+  # Faceting
+  facet_wrap(~ outcome, scales = "free_y") +
+  # FORCING X-AXIS RANGE 1-7
+  scale_x_continuous(limits = c(1, 7), breaks = 1:7) +
+  labs(
+    x = "PAPR", # Adjusted to match the variable name
+    y = "Predicted Outcome / Probability",
+    title = "Relationship between PAPR and Deliberative Outcomes"
+  ) +
+  theme_classic()
+```
