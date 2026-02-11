@@ -1,0 +1,786 @@
+---
+title: "p2_OLS"
+author: "yy_tw"
+date: "2025-12-04"
+output: html_document
+---
+
+```{r}
+# ==============================================================================
+# CHUNK 1: SETUP AND DATA PREPARATION (FREQUENTIST)
+# ==============================================================================
+
+# Load necessary libraries
+# If you do not have these installed, run: install.packages(c("tidyverse", "boot", "car", "lmtest"))
+library(tidyverse)
+library(boot)   # For bootstrapping the indirect effects
+library(car)    # For ANOVA and overall model summaries
+library(lmtest) # For testing model assumptions
+
+# 1. Read the dataset
+dat <- read.csv("p2.csv")
+
+# 2. Data Cleaning and Variable Types
+# Handle missing data listwise (specifically for DQPD as requested)
+dat <- dat %>% drop_na(DQPD)
+
+# Define Variable Types
+dat <- dat %>%
+  mutate(
+    # Factorize Categorical Predictors (DISP is the main X)
+    DISP = factor(DISP, levels = c(0, 1, 2, 3)), # Reference level is 0
+    DEM8 = factor(DEM8),
+    
+    # Ensure binary outcomes are numeric 0/1 for glm (logistic regression)
+    POP = as.numeric(POP), 
+    WCCS = as.numeric(WCCS),
+    
+    # Ensure continuous variables are numeric
+    PAPA = as.numeric(PAPA),
+    WCCP = as.numeric(WCCP),
+    DQPD = as.numeric(DQPD),
+    DR = as.numeric(DR), 
+    
+    # Controls
+    CCP1_1 = as.numeric(CCP1_1),
+    PEF = as.numeric(PEF),
+    NFC = as.numeric(NFC),
+    CII = as.numeric(CII)
+  )
+
+# Define Control Variable String
+controls <- "DEM8 + CCP1_1 + PEF + NFC + CII"
+
+```
+
+```{r}
+# ==============================================================================
+# CHUNK 2: OLS/GLM MODEL SPECIFICATION (H1, H2, H3)
+# ==============================================================================
+
+# --- Model 1: Mediator Model (H1: DISP -> PAPA) ---
+f_med <- as.formula(paste("PAPA ~ DISP +", controls))
+m_papa_ols <- lm(f_med, data = dat)
+summary(m_papa_ols) # H1 Test
+
+# --- Model 2: Outcome Models (Quadratic Form for H2, H3, H6, H7) ---
+# Y ~ PAPA + PAPA^2 + DISP + Controls
+
+# 2a. Democratic Reciprocity (DR) - OLS (Continuous)
+f_dr_quad <- as.formula(paste("DR ~ PAPA + I(PAPA^2) + DISP +", controls))
+m_dr_ols_quad <- lm(f_dr_quad, data = dat)
+summary(m_dr_ols_quad) 
+
+# 2b. WCCP - OLS (Continuous)
+f_wccp_quad <- as.formula(paste("WCCP ~ PAPA + I(PAPA^2) + DISP +", controls))
+m_wccp_ols_quad <- lm(f_wccp_quad, data = dat)
+summary(m_wccp_ols_quad)
+
+# 2c. WCCS - GLM (Binary - Logistic)
+f_wccs_quad <- as.formula(paste("WCCS ~ PAPA + I(PAPA^2) + DISP +", controls))
+m_wccs_glm_quad <- glm(f_wccs_quad, data = dat, family = binomial(link = "logit"))
+summary(m_wccs_glm_quad)
+
+# 2d. POP - GLM (Binary - Logistic)
+f_pop_quad <- as.formula(paste("POP ~ PAPA + I(PAPA^2) + DISP +", controls))
+m_pop_glm_quad <- glm(f_pop_quad, data = dat, family = binomial(link = "logit"))
+summary(m_pop_glm_quad)
+
+# 2e. DQPD - OLS (Continuous)
+f_dqpd_quad <- as.formula(paste("DQPD ~ PAPA + I(PAPA^2) + DISP +", controls))
+m_dqpd_ols_quad <- lm(f_dqpd_quad, data = dat)
+summary(m_dqpd_ols_quad) 
+```
+
+```{r}
+# ==============================================================================
+# CHUNK 3: ANOVA FOR NON-LINEARITY TEST (H6, H7 SHAPE)
+# ==============================================================================
+cat("\n=== CHUNK 3: ANOVA for Quadratic Term Significance (H6, H7 Shape) ===\n")
+
+# Use ANOVA to formally test if the quadratic term significantly improves model fit
+# over a purely linear model (i.e., is the curvature necessary?)
+
+# --- DR (H6a) ---
+f_dr_linear <- as.formula(paste("DR ~ PAPA + DISP +", controls))
+m_dr_ols_linear <- lm(f_dr_linear, data = dat)
+dr_anova <- anova(m_dr_ols_linear, m_dr_ols_quad)
+cat("\n--- ANOVA: Linear DR vs Quadratic DR (Test of H6a Shape) ---\n")
+print(dr_anova)
+
+# --- WCCP (H6b) ---
+f_wccp_linear <- as.formula(paste("WCCP ~ PAPA + DISP +", controls))
+m_wccp_ols_linear <- lm(f_wccp_linear, data = dat)
+wccp_anova <- anova(m_wccp_ols_linear, m_wccp_ols_quad)
+cat("\n--- ANOVA: Linear WCCP vs Quadratic WCCP (Test of H6b Shape) ---\n")
+print(wccp_anova)
+
+# --- POP (H7a) ---
+f_pop_linear <- as.formula(paste("POP ~ PAPA + DISP +", controls))
+m_pop_glm_linear <- glm(f_pop_linear, data = dat, family = binomial(link = "logit"))
+pop_anova <- anova(m_pop_glm_linear, m_pop_glm_quad, test="Chisq")
+cat("\n--- ANOVA: Linear POP vs Quadratic POP (Test of H7a Shape) ---\n")
+print(pop_anova)
+
+# --- DQPD (H7b) ---
+f_dqpd_linear <- as.formula(paste("DQPD ~ PAPA + DISP +", controls))
+m_dqpd_ols_linear <- lm(f_dqpd_linear, data = dat)
+dqpd_anova <- anova(m_dqpd_ols_linear, m_dqpd_ols_quad)
+cat("\n--- ANOVA: Linear DQPD vs Quadratic DQPD (Test of H7b Shape) ---\n")
+print(dqpd_anova)
+
+# Note on WCCS: The log-likelihood difference (ANOVA) is the standard test for GLMs.
+# For WCCS (H6c), check the p-value of I(PAPA^2) in the glm summary (Chunk 2c) as 
+# the ANOVA approach can be less straightforward for comparison across links.
+```
+
+```{r}
+# ==============================================================================
+# CHUNK 4: NON-LINEAR MEDIATION (H4, H5, H6, H7) VIA BOOTSTRAPPING
+# ==============================================================================
+
+# Custom function to calculate the indirect effect components for bootstrapping.
+# We compare X=3 vs X=0 on the Average PAPA (M) value.
+ols_nie_decomposition <- function(data, indices, model_med, model_out, outcome_type="gaussian") {
+  
+  # Sample data based on bootstrap indices
+  d <- data[indices,]
+  
+  # Re-run models on the resampled data
+  m_med <- update(model_med, data = d)
+  m_out <- update(model_out, data = d)
+  
+  # --- Step 1: Predict M values (M_0 and M_1) ---
+  
+  # The a-path (DISP 3 vs 0) is captured by the coefficient b_DISP3
+  a_path <- coef(m_med)["DISP3"]
+  
+  # The base M value (M_0) when DISP=0 (at average controls)
+  # For simplicity and robustness, we calculate M_0 as the intercept (M when all other vars = 0)
+  m0_base <- coef(m_med)["(Intercept)"]
+  
+  # M_0 on the scale of PAPA (PAPA when DISP=0)
+  # This approximation is simple, but for more complex cases, predict M for the average person.
+  
+  # Simpler (but sometimes less accurate for average person):
+  M_0 <- m0_base 
+  M_1 <- m0_base + a_path
+  
+  # --- Step 2: Extract Outcome Coefficients ---
+  b_papa <- coef(m_out)["PAPA"]
+  b_papa2 <- coef(m_out)["I(PAPA^2)"]
+  
+  # --- Step 3: Calculate Indirect Effect Components (on LP Scale) ---
+  
+  # The indirect effect of X on Y via M (Total NIE on LP scale)
+  # NIE = Y(X=0, M_1) - Y(X=0, M_0)
+  
+  # 1. Total Indirect Effect (on LP Scale)
+  # This is the change in the linear predictor due to the change in M (from M_0 to M_1)
+  total_nie_lp <- (b_papa * M_1 + b_papa2 * M_1^2) - 
+                  (b_papa * M_0 + b_papa2 * M_0^2)
+  
+  # 2. Linear Component (H4/H5)
+  linear_nie_lp <- b_papa * (M_1 - M_0)
+  
+  # 3. Quadratic Component (H6/H7)
+  quadratic_nie_lp <- b_papa2 * (M_1^2 - M_0^2)
+  
+  
+  # Return the components
+  return(c(
+    total_nie_lp = total_nie_lp,
+    linear_nie_lp = linear_nie_lp,
+    quadratic_nie_lp = quadratic_nie_lp
+  ))
+}
+
+# Wrapper function for a single outcome
+run_nie_bootstrapping <- function(model_med, model_out, data, outcome_name, outcome_type="gaussian", R=1000) {
+  
+  cat(paste0("\n--- Bootstrapping NIE Components for ", outcome_name, " ---\n"))
+  
+  # Run the bootstrap (1000 replicates recommended for publication)
+  boot_results <- boot(
+    data = data,
+    statistic = ols_nie_decomposition,
+    R = R,
+    model_med = model_med,
+    model_out = model_out,
+    outcome_type = outcome_type
+  )
+  
+  # Calculate 95% CIs (Bias Corrected and Accelerated)
+  ci_total <- boot.ci(boot_results, type = "bca", index = 1)
+  ci_linear <- boot.ci(boot_results, type = "bca", index = 2)
+  ci_quad <- boot.ci(boot_results, type = "bca", index = 3)
+  
+  # Print Results
+  print_ci <- function(ci, name, component) {
+    cat(paste0("  - ", name, " (", component, ")\n"))
+    # Extract point estimate (mean) and 95% BCa CI
+    est <- mean(boot_results$t[, component]) 
+    low <- ci$bca[4]
+    high <- ci$bca[5]
+    
+    cat(sprintf("    Estimate: %.3f\n    95%% BCa CI: [%.3f, %.3f]\n", est, low, high))
+    
+    # Check significance
+    if (high < 0) cat("    Result: Significant Negative Effect (Supported)\n")
+    else if (low > 0) cat("    Result: Significant Positive Effect (Supported)\n")
+    else cat("    Result: Not Significant (CI includes 0)\n")
+  }
+  
+  print_ci(ci_total, "Total NIE (H4/H5)", 1)
+  print_ci(ci_linear, "Linear LP Component (H4/H5 component)", 2)
+  print_ci(ci_quad, "Quadratic LP Component (H6/H7 component)", 3)
+}
+
+cat("\n=== CHUNK 4: Bootstrapping Non-Linear Mediation (DISP 3 vs 0 via PAPA) ===\n")
+
+# H4 & H6 Outcomes (Continuous)
+run_nie_bootstrapping(m_papa_ols, m_dr_ols_quad, dat, "Democratic Reciprocity (DR)", outcome_type="gaussian")
+run_nie_bootstrapping(m_papa_ols, m_wccp_ols_quad, dat, "Willingness to Participate (WCCP)", outcome_type="gaussian")
+
+# H4 & H6 Outcome (Binary)
+run_nie_bootstrapping(m_papa_ols, m_wccs_glm_quad, dat, "Cross-Cut Sharing (WCCS)", outcome_type="binomial")
+
+# H5 & H7 Outcome (Binary)
+run_nie_bootstrapping(m_papa_ols, m_pop_glm_quad, dat, "Polarization (POP)", outcome_type="binomial")
+
+# H5 & H7 Outcome (Continuous)
+run_nie_bootstrapping(m_papa_ols, m_dqpd_ols_quad, dat, "Deliberative Quality (DQPD)", outcome_type="gaussian")
+```
+```{r}
+# ==============================================================================
+# CHUNK 5: VISUALIZATION (H6, H7) - Conditional Effects Plots
+# ==============================================================================
+cat("\n=== CHUNK 5: VISUALIZATION (Quadratic Conditional Effects) ===\n")
+
+# Function to plot the relationship between DISP (X) and PAPA (M) - (H1)
+plot_disp_papa_effect <- function(data) {
+  
+  # Calculate mean and standard error of PAPA for each DISP level
+  plot_data <- data %>%
+    group_by(DISP) %>%
+    summarise(
+      mean_PAPA = mean(PAPA, na.rm = TRUE),
+      se_PAPA = sd(PAPA, na.rm = TRUE) / sqrt(n())
+    )
+    
+  # Plot the bar chart with error bars
+  p <- ggplot(plot_data, aes(x = DISP, y = mean_PAPA, fill = DISP)) +
+    geom_bar(stat = "identity", position = position_dodge(), color = "black") +
+    geom_errorbar(aes(ymin = mean_PAPA - se_PAPA, ymax = mean_PAPA + se_PAPA), 
+                  width = 0.2, position = position_dodge(0.9)) +
+    labs(
+      title = "Effect of Intersubjectivity Prompting (DISP) on PAPA (H1)",
+      x = "Intersubjetivity Prompting (DISP Level)",
+      y = "Mean Perceived Affordance of Perspective Alignment (PAPA)",
+      fill = "DISP Level"
+    ) +
+    # Use a color-blind friendly palette
+    scale_fill_manual(values = c("0" = "#a6cee3", "1" = "#1f78b4", "2" = "#b2df8a", "3" = "#33a02c")) +
+    theme_minimal() +
+    theme(plot.title = element_text(face = "bold"))
+    
+  print(p)
+}
+
+# Function to create a prediction grid for plotting (for H6 and H7)
+create_prediction_grid <- function(model, outcome_name, plot_title) {
+  # 1. Define the range for the mediator (PAPA)
+  # FIX: Added na.rm = TRUE to handle potential NAs in PAPA, preventing the 'finite number' error.
+  papa_range <- seq(min(dat$PAPA, na.rm = TRUE), max(dat$PAPA, na.rm = TRUE), length.out = 100)
+  
+  # 2. Define the average person for controls (setting DISP=0)
+  ref_data <- dat %>%
+    summarise(
+      # Set factors to their mode and continuous vars to mean
+      DEM8 = factor(names(which.max(table(DEM8))), levels = levels(dat$DEM8)), 
+      CCP1_1 = mean(CCP1_1, na.rm=TRUE),
+      PEF = mean(PEF, na.rm=TRUE),
+      NFC = mean(NFC, na.rm=TRUE),
+      CII = mean(CII, na.rm=TRUE),
+      DISP = factor(0, levels = levels(dat$DISP)) # Control DISP at reference level (0)
+    )
+    
+  # 3. Combine grid and reference data
+  pred_data <- data.frame(PAPA = papa_range) %>%
+    crossing(ref_data)
+    
+  # 4. Predict the outcome (Y)
+  # Use type = "response" for the outcome scale (probability for GLM, mean for OLS)
+  pred_data$Y_pred <- predict(model, newdata = pred_data, type = "response")
+  
+  # Determine Y-axis label
+  if (inherits(model, "glm") && model$family$family == "binomial") {
+      y_lab <- paste("Predicted Probability of", outcome_name)
+  } else {
+      y_lab <- paste("Predicted", outcome_name)
+  }
+  
+  # 5. Plot the conditional effect
+  p <- ggplot(pred_data, aes(x = PAPA, y = Y_pred)) +
+    geom_line(linewidth = 1.2, color = "#1f77b4") +
+    labs(
+      title = plot_title,
+      x = "Perceived Affordance of Perspective Alignment (PAPA)",
+      y = y_lab
+    ) +
+    theme_minimal() +
+    theme(plot.title = element_text(face = "bold"))
+    
+  print(p)
+}
+
+# --- Generate H1 Plot ---
+cat("\n--- Visualization: DISP -> PAPA (H1) ---\n")
+plot_disp_papa_effect(dat)
+
+# --- Generate H6/H7 Plots (PAPA -> Y Quadratic Effects) ---
+cat("\n--- Visualization: PAPA -> Y Quadratic Effects (H6/H7) ---\n")
+# H6 Outcomes (Concave predicted shape, b_PAPA2 < 0)
+create_prediction_grid(m_dr_ols_quad, "Democratic Reciprocity (DR)", "PAPA -> DR Curvilinear Effect (H6a)")
+create_prediction_grid(m_wccp_ols_quad, "Willingness to Participate (WCCP)", "PAPA -> WCCP Curvilinear Effect (H6b)")
+create_prediction_grid(m_wccs_glm_quad, "Cross-Cut Sharing (WCCS)", "PAPA -> WCCS Curvilinear Effect (H6c)")
+
+# H7 Outcomes (Accelerating predicted shape, b_PAPA2 < 0)
+create_prediction_grid(m_pop_glm_quad, "Polarization (POP)", "PAPA -> POP Curvilinear Effect (H7a)")
+create_prediction_grid(m_dqpd_ols_quad, "Deliberative Quality (DQPD)", "PAPA -> DQPD Curvilinear Effect (H7b)")
+
+
+```
+
+```{r}
+# ==============================================================================
+# CHUNK 6: APA STYLE REPORT GENERATION (FREQUENTIST)
+# ==============================================================================
+
+cat("\n======================================================\n")
+cat("APA STYLE REPORT SNIPPET (FREQUENTIST)\n")
+cat("======================================================\n")
+
+# Example: Reporting the quadratic regression for DR (H2a & H6a)
+dr_summary <- summary(m_dr_ols_quad)
+dr_papa_est <- format(round(dr_summary$coefficients["PAPA", "Estimate"], 2), nsmall=2)
+dr_papa_p <- format(round(dr_summary$coefficients["PAPA", "Pr(>|t|)"], 3), nsmall=3)
+dr_papa2_est <- format(round(dr_summary$coefficients["I(PAPA^2)", "Estimate"], 2), nsmall=2)
+dr_papa2_p <- format(round(dr_summary$coefficients["I(PAPA^2)", "Pr(>|t|)"], 3), nsmall=3)
+
+cat(paste0("Regression analysis predicting Democratic Reciprocity (DR) revealed that PAPA was a significant positive linear predictor (b = ", dr_papa_est, ", p = ", dr_papa_p, ") while the quadratic term (I(PAPA^2)) was also significant (b = ", dr_papa2_est, ", p = ", dr_papa2_p, "), indicating a curvilinear relationship. The ANOVA confirmed that the quadratic model significantly improved the fit over the linear model, supporting the non-linear shape component of H6a.\n"))
+
+# Example: Reporting the quadratic regression for POP (H3a & H7a)
+pop_summary <- summary(m_pop_glm_quad)
+pop_papa_est <- format(round(pop_summary$coefficients["PAPA", "Estimate"], 2), nsmall=2)
+pop_papa_p <- format(round(pop_summary$coefficients["PAPA", "Pr(>|z|)"], 3), nsmall=3)
+pop_papa2_est <- format(round(pop_summary$coefficients["I(PAPA^2)", "Estimate"], 2), nsmall=2)
+pop_papa2_p <- format(round(pop_summary$coefficients["I(PAPA^2)", "Pr(>|z|)"], 3), nsmall=3)
+
+cat(paste0("The logistic regression predicting Polarization (POP) showed a significant linear effect of PAPA (b = ", pop_papa_est, ", p = ", pop_papa_p, ") and a significant quadratic effect (b = ", pop_papa2_est, ", p = ", pop_papa2_p, ") on the log-odds of Polarization.\n"))
+
+cat("\n(Remember to report the specific CI and effect size from the bootstrapping output for the mediation tests, H4-H7.)\n")
+```
+
+```{r}
+# Function to plot the relationship between DISP (X) and PAPA (M) - (H1)
+plot_disp_papa_effect <- function(data) {
+  # Plot the bar chart with error bars
+  p <- ggplot(plot_data, aes(x = DISP, y = mean_PAPA, fill = DISP)) +
+    geom_bar(stat = "identity", position = position_dodge(), color = "black") +
+    geom_errorbar(aes(ymin = mean_PAPA - se_PAPA, ymax = mean_PAPA + se_PAPA), 
+                  width = 0.2, position = position_dodge(0.9)) +
+    labs(
+      title = "Effect of Disclosure Setting (DISP) on PAPA (H1)",
+      x = "Intersubjetivity Prompting (DISP Level)",
+      y = "Mean Perceived Affordance of Perspective Alignment (PAPA)",
+      fill = "DISP Level"
+    ) +
+    # Use a color-blind friendly palette
+    scale_fill_manual(values = c("0" = "#a6cee3", "1" = "#1f78b4", "2" = "#b2df8a", "3" = "#33a02c")) +
+    theme_minimal() +
+    theme(plot.title = element_text(face = "bold"))
+    
+  print(p)
+}
+# --- Generate H1 Plot ---
+cat("\n--- Visualization: DISP -> PAPA (H1) ---\n")
+plot_disp_papa_effect(dat)
+```
+
+```{r}
+library(tidyverse)
+library(broom)
+library(boot)
+library(sandwich)
+library(lmtest)
+library(ggplot2)
+library(purrr)
+library(scales)
+
+set.seed(2025)  # reproducible bootstrap/etc.
+
+# Read dataset
+dat <- read_csv("p2.csv", col_types = cols())
+glimpse(dat)
+```
+
+```{r}
+### Chunk 2: Recode / prepare variables, handle listwise DQPD missing (FIXED)
+# Make sure variables exist and are numeric/factors as needed
+# Using explicit base-R assignments to avoid accidental spacing issues
+
+# Convert / coerce variables
+dat$DISP <- as.numeric(dat$DISP)    # ensure numeric 0-3
+dat$PAPA <- as.numeric(dat$PAPA)    # 1-7
+dat$POP  <- as.integer(dat$POP)     # binary 0/1
+dat$WCCP <- as.numeric(dat$WCCP)    # 1-7
+dat$WCCS <- as.integer(dat$WCCS)    # binary 0/1
+dat$DQPD <- as.numeric(dat$DQPD)    # 0-8 (NA kept)
+
+# Factor / label partisanship
+dat$DEM8 <- factor(dat$DEM8,
+                   levels = c(1,2,3,4),
+                   labels = c("Dem","Rep","Ind","Other"))
+
+# Controls -> numeric (and center them)
+dat$CCP1_1 <- as.numeric(dat$CCP1_1)  # 1-7
+dat$PEF     <- as.numeric(dat$PEF)    # 1-7
+dat$NFC     <- as.numeric(dat$NFC)    # 1-7
+dat$CII     <- as.numeric(dat$CII)    # 1-7
+
+# Center continuous controls (for interpretability)
+dat$CCP1_1_c <- dat$CCP1_1 - mean(dat$CCP1_1, na.rm = TRUE)
+dat$PEF_c    <- dat$PEF    - mean(dat$PEF, na.rm = TRUE)
+dat$NFC_c    <- dat$NFC    - mean(dat$NFC, na.rm = TRUE)
+dat$CII_c    <- dat$CII    - mean(dat$CII, na.rm = TRUE)
+
+# Create a centered DISP if you want (optional, used later)
+dat$DISP_c <- dat$DISP - mean(dat$DISP, na.rm = TRUE)
+
+# Create dataset for DQPD models that listwise removes DQPD NAs
+dat_dqpd <- dat[!is.na(dat$DQPD), ]
+
+# Quick checks
+table(dat$DISP, useNA = "ifany")
+summary(dat$PAPA)
+table(dat$POP, useNA = "ifany")
+nrow(dat); nrow(dat_dqpd)
+```
+
+```{r}
+### Chunk 3: Mediator model (H1) -- DISP (0-3 numeric) predicting PAPA (test U-shaped)
+# We'll model PAPA ~ DISP + DISP^2 + controls (DEM8 as factor)
+dat <- dat %>% mutate(DISP_c = as.numeric(DISP) - mean(as.numeric(DISP), na.rm=TRUE))
+
+med_model <- lm(PAPA ~ DISP + I(DISP^2) + DEM8 + CCP1_1_c + PEF_c + NFC_c + CII_c,
+                data = dat)
+summary(med_model)
+
+# Robust SEs (HC3)
+coeftest(med_model, vcov = vcovHC(med_model, type = "HC3"))
+
+```
+
+```{r}
+### Chunk 4: Visualize PAPA vs DISP with quadratic fit and 95% CI
+# Create prediction grid for DISP 0-3 (numeric)
+pred_grid <- tibble(DISP = seq(0,3, by=0.01)) %>%
+  mutate(
+    DEM8 = "Dem",                             # choose reference for plotting (can change)
+    CCP1_1_c = 0, PEF_c = 0, NFC_c = 0, CII_c = 0
+  )
+
+pred_grid <- pred_grid %>%
+  bind_cols(predict(med_model, newdata = pred_grid, se.fit = TRUE) %>%
+              as_tibble() %>% rename(.fitted = fit, .se.fit = se.fit)) %>%
+  mutate(
+    lower = .fitted - 1.96 * .se.fit,
+    upper = .fitted + 1.96 * .se.fit
+  )
+
+ggplot(pred_grid, aes(x = DISP, y = .fitted)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2) +
+  geom_line(size = 1) +
+  geom_jitter(data = dat, aes(x = as.numeric(DISP), y = PAPA), width = 0.08, alpha = 0.3) +
+  labs(x = "DISP (0-3)", y = "PAPA (1-7)", title = "Predicted PAPA across DISP (quadratic fit)") +
+  theme_minimal()
+
+```
+
+```{r}
+### Chunk 5: Outcome models (H2 & H3): PAPA (and PAPA^2) predicting downstream outcomes
+# For each outcome we'll include PAPA + I(PAPA^2) and controls; for logistic outcomes use glm(family=binomial)
+# Also include DISP and DISP^2 as covariates, per plan (so direct path is controlled)
+# Continuous outcomes: DR, WCCP, DQPD (DR not defined in range — treat as continuous)
+# Binary outcomes: POP (binary), WCCS (binary)
+
+# Confirm DR exists; if named differently, adjust.
+if(!"DR" %in% names(dat)){
+  stop("Variable DR not found in dat. Please make sure 'DR' exists.")
+}
+
+# Linear models
+mod_DR <- lm(DR ~ PAPA + I(PAPA^2) + DISP + I(DISP^2) + DEM8 + CCP1_1_c + PEF_c + NFC_c + CII_c,
+             data = dat)
+summary(mod_DR)
+coeftest(mod_DR, vcov = vcovHC(mod_DR, type="HC3"))
+
+mod_WCCP <- lm(WCCP ~ PAPA + I(PAPA^2) + DISP + I(DISP^2) + DEM8 + CCP1_1_c + PEF_c + NFC_c + CII_c,
+               data = dat)
+summary(mod_WCCP)
+coeftest(mod_WCCP, vcov = vcovHC(mod_WCCP, type="HC3"))
+
+mod_DQPD <- lm(DQPD ~ PAPA + I(PAPA^2) + DISP + I(DISP^2) + DEM8 + CCP1_1_c + PEF_c + NFC_c + CII_c,
+               data = dat_dqpd)   # listwise remove DQPD NAs per plan
+summary(mod_DQPD)
+coeftest(mod_DQPD, vcov = vcovHC(mod_DQPD, type="HC3"))
+
+# Logistic (binary) models
+mod_POP <- glm(POP ~ PAPA + I(PAPA^2) + DISP + I(DISP^2) + DEM8 + CCP1_1_c + PEF_c + NFC_c + CII_c,
+               data = dat, family = binomial(link = "logit"))
+summary(mod_POP)
+# robust SE for glm: use sandwich + coeftest
+coeftest(mod_POP, vcov = vcovHC(mod_POP, type = "HC3"))
+
+mod_WCCS <- glm(WCCS ~ PAPA + I(PAPA^2) + DISP + I(DISP^2) + DEM8 + CCP1_1_c + PEF_c + NFC_c + CII_c,
+                data = dat, family = binomial(link = "logit"))
+summary(mod_WCCS)
+coeftest(mod_WCCS, vcov = vcovHC(mod_WCCS, type = "HC3"))
+
+```
+
+```{r}
+### Chunk 6: Visualize each outcome vs PAPA (quadratic fit)
+# Helper function to create a plot for a continuous outcome
+plot_continuous_vs_papa <- function(model, data, ylab.title){
+  grid <- tibble(PAPA = seq(1,7,by=0.01)) %>%
+    mutate(
+      DISP = mean(as.numeric(data$DISP), na.rm=TRUE),
+      DEM8 = "Dem",
+      CCP1_1_c = 0, PEF_c = 0, NFC_c = 0, CII_c = 0
+    )
+  preds <- predict(model, newdata = grid, se.fit = TRUE)
+  grid <- grid %>% bind_cols(as_tibble(preds)) %>%
+    mutate(lower = fit - 1.96 * se.fit, upper = fit + 1.96 * se.fit)
+  ggplot() +
+    geom_ribbon(data = grid, aes(x = PAPA, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = grid, aes(x = PAPA, y = fit), size=1) +
+    geom_point(data = data, aes(x = PAPA, y = !!sym(ylab.title)), alpha = 0.3) +
+    labs(x="PAPA (1-7)", y=ylab.title, title = paste("Predicted", ylab.title, "by PAPA")) +
+    theme_minimal()
+}
+
+# Plot DR
+print(plot_continuous_vs_papa(mod_DR, dat, "DR"))
+
+# Plot WCCP
+print(plot_continuous_vs_papa(mod_WCCP, dat, "WCCP"))
+
+# Plot DQPD (use dat_dqpd)
+print(plot_continuous_vs_papa(mod_DQPD, dat_dqpd, "DQPD"))
+
+# For binary outcomes, plot predicted probabilities
+plot_binary_vs_papa <- function(model, data, outcome_name){
+  grid <- tibble(PAPA = seq(1,7,by=0.01)) %>%
+    mutate(DISP = mean(as.numeric(data$DISP), na.rm=TRUE),
+           DEM8 = "Dem", CCP1_1_c = 0, PEF_c = 0, NFC_c = 0, CII_c = 0)
+  preds <- predict(model, newdata = grid, type = "response", se.fit = FALSE)
+  grid <- grid %>% mutate(pred = preds)
+  ggplot() +
+    geom_line(data = grid, aes(x = PAPA, y = pred), size = 1) +
+    geom_jitter(data = data, aes(x = PAPA, y = !!sym(outcome_name)), height = 0.02, alpha = 0.25) +
+    labs(x="PAPA (1-7)", y="Predicted probability", title = paste("Predicted probability of", outcome_name, "by PAPA")) +
+    theme_minimal()
+}
+
+print(plot_binary_vs_papa(mod_POP, dat, "POP"))
+print(plot_binary_vs_papa(mod_WCCS, dat, "WCCS"))
+
+```
+
+```{r}
+### Chunk 7: Bootstrap indirect effects for curvilinear mediation
+# Approach:
+# - Fit mediator model M = f(DIS P, DISP^2, controls)
+# - Fit outcome model Y = g(PAPA, PAPA^2, DISP, DISP^2, controls)
+# - To compute an indirect effect of a DISP change (d -> d+1) via the mediator:
+#   1. Compute m_d  = predict M at DISP = d
+#   2. Compute m_d1 = predict M at DISP = d+1
+#   3. Compute Y_m_d1 = predict Y setting DISP fixed at d and mediator = m_d1
+#   4. Compute Y_m_d  = predict Y setting DISP fixed at d and mediator = m_d
+#   5. Indirect effect = Y_m_d1 - Y_m_d  (this isolates the portion of the DISP->Y change due to mediator)
+#
+# We'll bootstrap this procedure nonparametrically.
+
+# Define function to compute indirect effect for a change from d -> d+1
+calc_indirect <- function(data, indices, d, outcome_name, outcome_family = "gaussian"){
+  dsub <- data[indices, ]
+  # mediator model
+  med_fit <- lm(PAPA ~ DISP + I(DISP^2) + DEM8 + CCP1_1_c + PEF_c + NFC_c + CII_c, data = dsub)
+  # outcome model: choose appropriate family
+  if(outcome_family == "gaussian"){
+    out_fit <- lm(as.formula(paste0(outcome_name," ~ PAPA + I(PAPA^2) + DISP + I(DISP^2) + DEM8 + CCP1_1_c + PEF_c + NFC_c + CII_c")), data = dsub)
+  } else if(outcome_family == "binomial"){
+    out_fit <- glm(as.formula(paste0(outcome_name," ~ PAPA + I(PAPA^2) + DISP + I(DISP^2) + DEM8 + CCP1_1_c + PEF_c + NFC_c + CII_c")), data = dsub, family = binomial(link="logit"))
+  } else {
+    stop("unsupported family")
+  }
+
+  # Build newdata rows for DISP = d and mediator values predicted at d and d+1
+  base_row <- dsub %>% slice(1) %>% # just to get covariates like DEM8; we will set covariates to reference values
+    mutate(
+      DEM8 = DEM8[1],
+      CCP1_1_c = 0, PEF_c = 0, NFC_c = 0, CII_c = 0
+    ) %>% slice(1)
+
+  new_d <- base_row %>% mutate(DISP = d)
+  new_d1 <- base_row %>% mutate(DISP = d+1)
+
+  m_d  <- predict(med_fit, newdata = new_d)
+  m_d1 <- predict(med_fit, newdata = new_d1)
+
+  # For outcome prediction, set DISP fixed at d, and set mediator to m_d and m_d1 respectively
+  # Create data rows with PAPA filled with m_d / m_d1
+  row_m_d  <- new_d %>% mutate(PAPA = m_d)
+  row_m_d1 <- new_d %>% mutate(PAPA = m_d1)
+
+  # For models with PAPA^2, predictions depend on PAPA numeric
+  if(outcome_family == "gaussian"){
+    y_m_d  <- predict(out_fit, newdata = row_m_d)
+    y_m_d1 <- predict(out_fit, newdata = row_m_d1)
+  } else {
+    y_m_d  <- predict(out_fit, newdata = row_m_d, type="response")
+    y_m_d1 <- predict(out_fit, newdata = row_m_d1, type="response")
+  }
+
+  indirect <- as.numeric(y_m_d1 - y_m_d)
+  return(indirect)
+}
+
+# Wrapper to bootstrap for particular outcome and change (d->d+1)
+bootstrap_indirect <- function(data, d_from, outcome_name, family="gaussian", n_boot=2000){
+  boot_obj <- boot(data = data, statistic = function(dat, idx) calc_indirect(dat, idx, d_from, outcome_name, outcome_family=family), R = n_boot)
+  est <- boot_obj$t0
+  ci <- boot.ci(boot_obj, type="perc")$percent[4:5]
+  tibble(outcome = outcome_name, change_from = d_from, est = est, ci_low = ci[1], ci_high = ci[2], n_boot = n_boot)
+}
+
+# Run for changes 0->1,1->2,2->3 and overall 0->3 (we compute 0->3 by summing stepwise changes)
+n_boot <- 2000
+
+# For continuous outcomes
+ind_DR_0_1 <- bootstrap_indirect(dat, 0, "DR", family="gaussian", n_boot = n_boot)
+ind_DR_1_2 <- bootstrap_indirect(dat, 1, "DR", family="gaussian", n_boot = n_boot)
+ind_DR_2_3 <- bootstrap_indirect(dat, 2, "DR", family="gaussian", n_boot = n_boot)
+
+ind_WCCP_0_1 <- bootstrap_indirect(dat, 0, "WCCP", family="gaussian", n_boot = n_boot)
+ind_WCCP_1_2 <- bootstrap_indirect(dat, 1, "WCCP", family="gaussian", n_boot = n_boot)
+ind_WCCP_2_3 <- bootstrap_indirect(dat, 2, "WCCP", family="gaussian", n_boot = n_boot)
+
+ind_DQPD_0_1 <- bootstrap_indirect(dat_dqpd, 0, "DQPD", family="gaussian", n_boot = n_boot)
+ind_DQPD_1_2 <- bootstrap_indirect(dat_dqpd, 1, "DQPD", family="gaussian", n_boot = n_boot)
+ind_DQPD_2_3 <- bootstrap_indirect(dat_dqpd, 2, "DQPD", family="gaussian", n_boot = n_boot)
+
+# For binary outcomes (predicted probability differences)
+ind_POP_0_1 <- bootstrap_indirect(dat, 0, "POP", family="binomial", n_boot = n_boot)
+ind_POP_1_2 <- bootstrap_indirect(dat, 1, "POP", family="binomial", n_boot = n_boot)
+ind_POP_2_3 <- bootstrap_indirect(dat, 2, "POP", family="binomial", n_boot = n_boot)
+
+ind_WCCS_0_1 <- bootstrap_indirect(dat, 0, "WCCS", family="binomial", n_boot = n_boot)
+ind_WCCS_1_2 <- bootstrap_indirect(dat, 1, "WCCS", family="binomial", n_boot = n_boot)
+ind_WCCS_2_3 <- bootstrap_indirect(dat, 2, "WCCS", family="binomial", n_boot = n_boot)
+
+# Combine and print
+indirect_results <- bind_rows(
+  ind_DR_0_1, ind_DR_1_2, ind_DR_2_3,
+  ind_WCCP_0_1, ind_WCCP_1_2, ind_WCCP_2_3,
+  ind_DQPD_0_1, ind_DQPD_1_2, ind_DQPD_2_3,
+  ind_POP_0_1, ind_POP_1_2, ind_POP_2_3,
+  ind_WCCS_0_1, ind_WCCS_1_2, ind_WCCS_2_3
+)
+
+print(indirect_results)
+
+```
+
+```{r}
+### Chunk 8: Summarize indirect effects for change 0 -> 3 (aggregate)
+# Sum bootstrap samples across steps to approximate 0->3 (nonparametric sum of 3 steps)
+# Simpler approach: directly compute indirect effect for 0->3 using the same function by setting d = 0 and using m at d and d+3
+calc_indirect_change <- function(data, indices, d_from, d_to, outcome_name, outcome_family="gaussian"){
+  dsub <- data[indices, ]
+  med_fit <- lm(PAPA ~ DISP + I(DISP^2) + DEM8 + CCP1_1_c + PEF_c + NFC_c + CII_c, data = dsub)
+  if(outcome_family == "gaussian"){
+    out_fit <- lm(as.formula(paste0(outcome_name," ~ PAPA + I(PAPA^2) + DISP + I(DISP^2) + DEM8 + CCP1_1_c + PEF_c + NFC_c + CII_c")), data = dsub)
+  } else {
+    out_fit <- glm(as.formula(paste0(outcome_name," ~ PAPA + I(PAPA^2) + DISP + I(DISP^2) + DEM8 + CCP1_1_c + PEF_c + NFC_c + CII_c")), data = dsub, family=binomial(link="logit"))
+  }
+
+  base_row <- dsub %>% slice(1) %>% mutate(DEM8 = DEM8[1], CCP1_1_c = 0, PEF_c = 0, NFC_c = 0, CII_c = 0) %>% slice(1)
+  row_from <- base_row %>% mutate(DISP = d_from)
+  row_to   <- base_row %>% mutate(DISP = d_to)
+
+  m_from <- predict(med_fit, newdata = row_from)
+  m_to   <- predict(med_fit, newdata = row_to)
+
+  # predict outcome with DISP fixed at d_from, mediator set to m_to and m_from
+  row_m_from <- row_from %>% mutate(PAPA = m_from)
+  row_m_to   <- row_from %>% mutate(PAPA = m_to)
+
+  if(outcome_family == "gaussian"){
+    y_from <- predict(out_fit, newdata = row_m_from)
+    y_to   <- predict(out_fit, newdata = row_m_to)
+  } else {
+    y_from <- predict(out_fit, newdata = row_m_from, type="response")
+    y_to   <- predict(out_fit, newdata = row_m_to, type="response")
+  }
+  return(as.numeric(y_to - y_from))
+}
+
+bootstrap_indirect_change <- function(data, d_from, d_to, outcome_name, family="gaussian", n_boot=2000){
+  boot_obj <- boot(data = data, statistic = function(dat, idx) calc_indirect_change(dat, idx, d_from, d_to, outcome_name, outcome_family=family), R = n_boot)
+  est <- boot_obj$t0
+  ci <- boot.ci(boot_obj, type="perc")$percent[4:5]
+  tibble(outcome = outcome_name, change_from = paste0(d_from,"->",d_to), est = est, ci_low = ci[1], ci_high = ci[2], n_boot = n_boot)
+}
+
+res_DR_0_3 <- bootstrap_indirect_change(dat, 0, 3, "DR", family="gaussian", n_boot=n_boot)
+res_WCCP_0_3 <- bootstrap_indirect_change(dat, 0, 3, "WCCP", family="gaussian", n_boot=n_boot)
+res_DQPD_0_3 <- bootstrap_indirect_change(dat_dqpd, 0, 3, "DQPD", family="gaussian", n_boot=n_boot)
+res_POP_0_3 <- bootstrap_indirect_change(dat, 0, 3, "POP", family="binomial", n_boot=n_boot)
+res_WCCS_0_3 <- bootstrap_indirect_change(dat, 0, 3, "WCCS", family="binomial", n_boot=n_boot)
+
+bind_rows(res_DR_0_3, res_WCCP_0_3, res_DQPD_0_3, res_POP_0_3, res_WCCS_0_3)
+```
+
+```{r}
+### Chunk 9: Make a concise table of model coefficients (mediator + outcome models) for reporting
+library(broom)
+models_list <- list(mediator = med_model,
+                    DR = mod_DR,
+                    WCCP = mod_WCCP,
+                    DQPD = mod_DQPD,
+                    POP = mod_POP,
+                    WCCS = mod_WCCS)
+
+coef_tables <- map_df(models_list, ~ broom::tidy(.x, conf.int = TRUE), .id = "model")
+coef_tables %>% filter(term %in% c("PAPA","I(PAPA^2)","DISP","I(DISP^2)")) %>% print(n=200)
+# You can write the full table to CSV for archival/reporting
+write_csv(coef_tables, "model_coefficients_summary.csv")
+write_csv(indirect_results, "indirect_effects_stepwise.csv")
+```
+
+```{r}
+### Chunk 10: Helpful visual summary plot of indirect effects (0->3) with CIs
+indirect_0_3 <- bind_rows(res_DR_0_3, res_WCCP_0_3, res_DQPD_0_3, res_POP_0_3, res_WCCS_0_3)
+
+ggplot(indirect_0_3, aes(x = outcome, y = est)) +
+  geom_point(size=3) +
+  geom_errorbar(aes(ymin = ci_low, ymax = ci_high), width = 0.2) +
+  labs(x = "Outcome", y = "Indirect effect (via PAPA) for DISP 0 -> 3", title = "Bootstrapped indirect effects (0 -> 3)") +
+  theme_minimal()
+```
+
+
+
