@@ -1,0 +1,200 @@
+---
+title: "mediation_visualizations"
+author: "yy_tw"
+date: "2025-12-18"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+
+med_df <- tribble(
+  ~Outcome, ~DISP, ~Effect, ~Estimate, ~CI_low, ~CI_high,
+
+  # ================= DR =================
+  "DR", 1, "ACME", -0.1097, -0.1953, -0.0361,
+  "DR", 1, "ADE",  -0.0522, -0.2896,  0.1913,
+  "DR", 1, "Total", -0.1619, -0.4135,  0.0994,
+
+  "DR", 2, "ACME", -0.0763, -0.1564, -0.0048,
+  "DR", 2, "ADE",   0.0081, -0.2252,  0.2415,
+  "DR", 2, "Total", -0.0682, -0.3115,  0.1763,
+
+  "DR", 3, "ACME", -0.1303, -0.2150, -0.0543,
+  "DR", 3, "ADE",   0.0226, -0.2137,  0.2548,
+  "DR", 3, "Total", -0.1077, -0.3459,  0.1288,
+
+  # ================= WCCP =================
+  "WCCP", 1, "ACME", -0.1256, -0.2212, -0.0406,
+  "WCCP", 1, "ADE",   0.0050, -0.2997,  0.3090,
+  "WCCP", 1, "Total", -0.1206, -0.4322,  0.1899,
+
+  "WCCP", 2, "ACME", -0.0874, -0.1785, -0.0019,
+  "WCCP", 2, "ADE",   0.0730, -0.2293,  0.3859,
+  "WCCP", 2, "Total", -0.0144, -0.3134,  0.2973,
+
+  "WCCP", 3, "ACME", -0.1492, -0.2484, -0.0629,
+  "WCCP", 3, "ADE",  -0.1089, -0.4101,  0.1924,
+  "WCCP", 3, "Total", -0.2581, -0.5693,  0.0443,
+
+  # ================= WCCS (average effects) =================
+  "WCCS", 1, "ACME", -0.0376, -0.0655, -0.0125,
+  "WCCS", 1, "ADE",   0.0488, -0.0458,  0.1474,
+  "WCCS", 1, "Total",  0.0112, -0.0861,  0.1109,
+
+  "WCCS", 2, "ACME", -0.0256, -0.0518, -0.0012,
+  "WCCS", 2, "ADE",   0.0736, -0.0214,  0.1681,
+  "WCCS", 2, "Total",  0.0480, -0.0480,  0.1456,
+
+  "WCCS", 3, "ACME", -0.0429, -0.0706, -0.0172,
+  "WCCS", 3, "ADE",   0.1320,  0.0365,  0.2254,
+  "WCCS", 3, "Total",  0.0891, -0.0069,  0.1853,
+
+  # ================= DQPD =================
+  "DQPD", 1, "ACME", -0.0428, -0.0827, -0.0125,
+  "DQPD", 1, "ADE",   0.2057,  0.0251,  0.3927,
+  "DQPD", 1, "Total",  0.1629, -0.0211,  0.3442,
+
+  "DQPD", 2, "ACME", -0.0298, -0.0645, -0.0006,
+  "DQPD", 2, "ADE",   0.2879,  0.1165,  0.4613,
+  "DQPD", 2, "Total",  0.2581,  0.0872,  0.4324,
+
+  "DQPD", 3, "ACME", -0.0508, -0.0952, -0.0182,
+  "DQPD", 3, "ADE",   0.3079,  0.1237,  0.5076,
+  "DQPD", 3, "Total",  0.2571,  0.0709,  0.4550
+)
+
+```
+
+```{r}
+ggplot(med_df,
+       aes(x = factor(DISP),
+           y = Estimate,
+           color = Effect)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_point(position = position_dodge(width = 0.5), size = 3) +
+  geom_errorbar(aes(ymin = CI_low, ymax = CI_high),
+                position = position_dodge(width = 0.5),
+                width = 0.15) +
+  facet_wrap(~ Outcome, scales = "free_y") +
+  labs(
+    x = "DISP (reference = 0)",
+    y = "Effect estimate",
+    color = "Effect type",
+    title = "Mediation effects across DISP contrasts",
+    subtitle = "ACME, ADE, and Total Effects with 95% CIs"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "top",
+    panel.grid.minor = element_blank()
+  )
+
+```
+
+
+```{r}
+ggplot(med_df,
+       aes(y = Effect, x = Estimate, color = Effect)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_point(size = 3) +
+  geom_errorbarh(aes(xmin = CI_low, xmax = CI_high),
+                 height = 0.2) +
+  facet_grid(Outcome ~ DISP) +
+  labs(
+    x = "Effect estimate",
+    y = NULL,
+    title = "ACME vs. ADE vs. Total Effects by DISP contrast"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "none",
+    panel.grid.minor = element_blank()
+  )
+
+```
+
+
+#Final version
+
+```{r}
+#. 1. Prepare a plotting function
+plot_mediation_outcome <- function(outcome_name, data) {
+
+  ggplot(
+    data %>% filter(Outcome == outcome_name),
+    aes(y = Effect, x = Estimate, color = Effect)
+  ) +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
+    geom_point(size = 3) +
+    geom_errorbarh(
+      aes(xmin = CI_low, xmax = CI_high),
+      height = 0.2
+    ) +
+    facet_wrap(~ DISP, nrow = 1) +
+    labs(
+      x = "Effect estimate",
+      y = NULL,
+      title = paste("Mediation effects for", outcome_name),
+      subtitle = "ACME, ADE, and Total effects with 95% CIs"
+    ) +
+    theme_minimal(base_size = 13) +
+    theme(
+      legend.position = "none",
+      panel.grid.minor = element_blank(),
+      strip.text = element_text(face = "bold")
+    )
+}
+```
+
+
+```{r}
+#. 2. Generate the four individual plots
+p_DR   <- plot_mediation_outcome("DR", med_df)
+p_WCCP <- plot_mediation_outcome("WCCP", med_df)
+p_WCCS <- plot_mediation_outcome("WCCS", med_df)
+p_DQPD <- plot_mediation_outcome("DQPD", med_df)
+
+```
+
+
+```{r}
+#. 3. Enforce identical x-axis limits across outcomes
+x_limits <- range(med_df$CI_low, med_df$CI_high)
+
+plot_mediation_outcome <- function(outcome_name, data) {
+
+  ggplot(
+    data %>% filter(Outcome == outcome_name),
+    aes(y = Effect, x = Estimate, color = Effect)
+  ) +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
+    geom_point(size = 3) +
+    geom_errorbarh(
+      aes(xmin = CI_low, xmax = CI_high),
+      height = 0.2
+    ) +
+    facet_wrap(~ DISP, nrow = 1) +
+    scale_x_continuous(limits = x_limits) +
+    labs(
+      x = "Effect estimate",
+      y = NULL,
+      title = paste("Mediation effects for", outcome_name),
+      subtitle = "ACME, ADE, and Total effects with 95% CIs"
+    ) +
+    theme_minimal(base_size = 13) +
+    theme(
+      legend.position = "none",
+      panel.grid.minor = element_blank(),
+      strip.text = element_text(face = "bold")
+    )
+}
+```
+
+```{r}
+ggsave("Fig_DR_mediation.png",   p_DR,   width = 9, height = 4.5, dpi = 300)
+ggsave("Fig_WCCP_mediation.png", p_WCCP, width = 9, height = 4.5, dpi = 300)
+ggsave("Fig_WCCS_mediation.png", p_WCCS, width = 9, height = 4.5, dpi = 300)
+ggsave("Fig_DQPD_mediation.png", p_DQPD, width = 9, height = 4.5, dpi = 300)
+```
+
