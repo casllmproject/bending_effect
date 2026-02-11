@@ -82,7 +82,7 @@ def create_prompt(profile):
     4.  Tone Requirement:
     Must use persuasive, suggestive and respectful language.
     5.  Length:
-    The article must be between 180 and 200 words in total.
+    The article must be between 150 and 180 words in total.
     6.  Headline:
     Include a typical online news-style headline that highlights how different viewpoints could find or build common ground on the issue.
     7.  Include EXACTLY 4 external news source labels within the text. Format them like [LABEL:Tooltip text]. For example: [Source: Pew Research Center, Nov 7, 2024]. Do not include actual hyperlinks.
