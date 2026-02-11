@@ -1,0 +1,1502 @@
+---
+title: "Pilot_1_analysis"
+author: "yy_tw"
+date: "2025-10-29"
+output: html_document
+---
+
+```{r}
+# Read the CSV file into a data frame named 'dat'
+dat <- read.csv("pilot_1.csv")
+
+# --- Variable Preparation ---
+
+# Convert the categorical/ordinal IVs to factors
+dat$AssignedGroup <- factor(dat$AssignedGroup,
+                            levels = c(0, 1, 2, 3), # Ensure order, though treated as categorical
+                            labels = c("Group 0", "Group 1", "Group 2", "Group 3"))
+
+dat$DEM8 <- factor(dat$DEM8,
+                   levels = c(1, 2, 3),
+                   labels = c("Democrat", "Republican", "Independent"))
+
+# Convert the dichotomous outcome SN to a factor/binary variable (for logistic regression)
+# While numerical (0/1) works for logit, factoring can be good practice.
+dat$SN <- factor(dat$SN,
+                 levels = c(0, 1),
+                 labels = c("No", "Yes"))
+
+# Display the structure of the data to verify changes
+str(dat)
+```
+
+```{r}
+# Assuming 'dat' is the original data frame.
+
+# 1. Re-level the DEM8 factor
+# Set 'Independent' as the first level, making it the reference group.
+dat$DEM8 <- factor(dat$DEM8, 
+                   levels = c("Independent", "Democrat", "Republican"),
+                   labels = c("Independent", "Democrat", "Republican"))
+
+# 2. Prepare the Numeric Assigned Group Variable (0, 1, 2, 3)
+# This prevents the 'NAs introduced by coercion' warning.
+dat$AssignedGroup_N <- as.numeric(dat$AssignedGroup) - 1
+
+# Check the new factor order (Independent should be the reference group)
+levels(dat$DEM8)
+```
+
+```{r}
+library(emmeans)
+# --- Model and EMM for PAPC ---
+model_PAPC_main <- lm(PAPC ~ AssignedGroup + DEM8, data = dat)
+# Calculate EMMs for AssignedGroup, averaging over DEM8
+emm_PAPC_main <- emmeans(model_PAPC_main, specs = ~ AssignedGroup)
+plot_data_PAPC_main <- as.data.frame(emm_PAPC_main)
+
+# --- Model and EMM for PAPC2 ---
+model_PAPC2_main <- lm(PAPC2 ~ AssignedGroup + DEM8, data = dat)
+emm_PAPC2_main <- emmeans(model_PAPC2_main, specs = ~ AssignedGroup)
+plot_data_PAPC2_main <- as.data.frame(emm_PAPC2_main)
+
+# --- Model and EMM for PAPC3_1 ---
+model_PAPC3_1_main <- lm(PAPC3_1 ~ AssignedGroup + DEM8, data = dat)
+emm_PAPC3_1_main <- emmeans(model_PAPC3_1_main, specs = ~ AssignedGroup)
+plot_data_PAPC3_1_main <- as.data.frame(emm_PAPC3_1_main)
+
+# --- Model and EMM for DR ---
+model_DR_main <- lm(DR ~ AssignedGroup + DEM8, data = dat)
+emm_DR_main <- emmeans(model_DR_main, specs = ~ AssignedGroup)
+plot_data_DR_main <- as.data.frame(emm_DR_main)
+```
+
+```{r}
+# --- Model and EMM for SN ---
+model_SN_main <- glm(SN ~ AssignedGroup + DEM8, data = dat, family = binomial(link = "logit"))
+# Calculate EMMs for AssignedGroup, averaging over DEM8, on probability scale
+emm_SN_main <- emmeans(model_SN_main, specs = ~ AssignedGroup, type = "response")
+plot_data_SN_main <- as.data.frame(emm_SN_main)
+```
+
+```{r}
+library(ggplot2)
+# --- Plot for PAPC ---
+plot_PAPC_main <- ggplot(plot_data_PAPC_main, aes(x = AssignedGroup, y = emmean, group = 1)) +
+  geom_line(color = "black", size = 1) +
+  geom_point(color = "blue", size = 3) +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.2, color = "blue") +
+  labs(title = "Main Effect of AssignedGroup on PAPC",
+       x = "Assigned Group",
+       y = "Estimated Marginal Mean of PAPC") +
+  theme_minimal()
+print(plot_PAPC_main)
+
+# --- Plot for PAPC2 ---
+plot_PAPC2_main <- ggplot(plot_data_PAPC2_main, aes(x = AssignedGroup, y = emmean, group = 1)) +
+  geom_line(color = "black", size = 1) +
+  geom_point(color = "blue", size = 3) +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.2, color = "blue") +
+  labs(title = "Main Effect of AssignedGroup on PAPA",
+       x = "Assigned Group",
+       y = "Estimated Marginal Mean of PAPA") +
+  theme_minimal()
+print(plot_PAPC2_main)
+
+# --- Plot for PAPC3_1 ---
+plot_PAPC3_1_main <- ggplot(plot_data_PAPC3_1_main, aes(x = AssignedGroup, y = emmean, group = 1)) +
+  geom_line(color = "black", size = 1) +
+  geom_point(color = "blue", size = 3) +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.2, color = "blue") +
+  labs(title = "Main Effect of AssignedGroup on PAPC3_1",
+       x = "Assigned Group",
+       y = "Estimated Marginal Mean of PAPC3_1") +
+  theme_minimal()
+print(plot_PAPC3_1_main)
+
+# --- Plot for DR ---
+plot_DR_main <- ggplot(plot_data_DR_main, aes(x = AssignedGroup, y = emmean, group = 1)) +
+  geom_line(color = "black", size = 1) +
+  geom_point(color = "blue", size = 3) +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.2, color = "blue") +
+  labs(title = "Main Effect of AssignedGroup on DR",
+       x = "Assigned Group",
+       y = "Estimated Marginal Mean of DR") +
+  theme_minimal()
+print(plot_DR_main)
+
+# --- Plot for SN (Dichotomous Outcome) ---
+plot_SN_main <- ggplot(plot_data_SN_main, aes(x = AssignedGroup, y = prob, group = 1)) +
+  geom_line(color = "black", size = 1) +
+  geom_point(color = "blue", size = 3) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2, color = "blue") +
+  labs(title = "Main Effect of AssignedGroup on SN (Predicted Probability)",
+       x = "Assigned Group",
+       y = "Predicted Probability of SN = Yes") +
+  ylim(0, 1) + # Ensure y-axis is appropriate for probability
+  theme_minimal()
+print(plot_SN_main)
+```
+
+```{r}
+# --- 1. Fix the Numeric AssignedGroup Variable ---
+# We use the underlying factor codes and subtract 1 to correctly map 
+# the levels back to the treatment numbers (0, 1, 2, 3).
+# Assuming the factor levels are ordered correctly (0, 1, 2, 3)
+dat$AssignedGroup_N <- as.numeric(dat$AssignedGroup) - 1
+
+# Note: R factors internally start at 1 (1=Group 0, 2=Group 1, etc.). 
+# Subtracting 1 correctly gives us the values 0, 1, 2, 3.
+
+# --- 2. Check and Re-level DEM8 ---
+# This ensures DEM8 is a factor and removes any levels that might have 0 observations,
+# which can sometimes trigger the 'contrasts' error.
+dat$DEM8 <- factor(dat$DEM8)
+
+# Validate that DEM8 has more than one level.
+if (nlevels(dat$DEM8) < 2) {
+  stop("CRITICAL ERROR: The 'DEM8' factor has fewer than 2 levels in the data. You cannot run the model.")
+}
+
+# --- 3. Run Quadratic Models (Main Effects) ---
+
+# PAPC Quadratic Model
+model_PAPC_quad <- lm(PAPC ~ AssignedGroup_N + I(AssignedGroup_N^2) + DEM8, data = dat)
+summary(model_PAPC_quad)
+
+# PAPC2 Quadratic Model
+model_PAPC2_quad <- lm(PAPC2 ~ AssignedGroup_N + I(AssignedGroup_N^2) + DEM8, data = dat)
+summary(model_PAPC2_quad)
+
+# PAPC3_1 Quadratic Model
+model_PAPC3_1_quad <- lm(PAPC3_1 ~ AssignedGroup_N + I(AssignedGroup_N^2) + DEM8, data = dat)
+summary(model_PAPC3_1_quad)
+
+# DR Quadratic Model
+model_DR_quad <- lm(DR ~ AssignedGroup_N + I(AssignedGroup_N^2) + DEM8, data = dat)
+summary(model_DR_quad)
+
+# SN Quadratic Model (Logistic)
+model_SN_quad <- glm(SN ~ AssignedGroup_N + I(AssignedGroup_N^2) + DEM8, 
+                     data = dat, 
+                     family = binomial(link = "logit"))
+summary(model_SN_quad)
+```
+
+
+
+
+```{r}
+### Interaction terms ####
+# --- Model for PAPC ---
+model_PAPC <- lm(PAPC ~ AssignedGroup * DEM8, data = dat)
+summary(model_PAPC)
+
+# ANOVA table to check overall significance and interaction
+anova_PAPC <- anova(model_PAPC)
+print(anova_PAPC)
+
+# --- Model for PAPC2 ---
+model_PAPC2 <- lm(PAPC2 ~ AssignedGroup * DEM8, data = dat)
+summary(model_PAPC2)
+
+# --- Model for PAPC3_1 ---
+model_PAPC3_1 <- lm(PAPC3_1 ~ AssignedGroup * DEM8, data = dat)
+summary(model_PAPC3_1)
+
+# --- Model for DR ---
+model_DR <- lm(DR ~ AssignedGroup * DEM8, data = dat)
+summary(model_DR)
+```
+
+```{r}
+# --- Model for SN (Logistic Regression) ---
+model_SN <- glm(SN ~ AssignedGroup * DEM8, data = dat, family = binomial(link = "logit"))
+summary(model_SN)
+
+# Use Anova (Type II or III) for better interpretation of factors in GLMs
+# You might need the 'car' package for Type II/III ANOVA
+# install.packages("car") # Run this if you don't have the package
+
+library(car)
+Anova(model_SN, type = 3) # Type III sums of squares often preferred for interaction
+```
+
+```{r}
+# Ensure 'ggplot2' and 'emmeans' are loaded
+library(ggplot2)
+library(emmeans)
+
+# Assuming model_PAPC was run successfully on dat_filtered
+# --- Plot for PAPC (Continuous Outcome) ---
+emm_PAPC <- emmeans(model_PAPC, specs = ~ AssignedGroup | DEM8)
+plot_data_PAPC <- as.data.frame(emm_PAPC)
+
+plot_PAPC <- ggplot(plot_data_PAPC, aes(x = AssignedGroup, y = emmean, color = DEM8, group = DEM8)) +
+  geom_line(size = 1) +
+  geom_point(size = 3) +
+  # CONFIRMED: Uses lower.CL and upper.CL for continuous outcomes
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.2) +
+  labs(
+    title = "Interaction Plot: AssignedGroup (1, 2, 3) and DEM8 on PAPC",
+    x = "Assigned Group (Non-linear Effect)",
+    y = "Estimated Marginal Mean of PAPC",
+    color = "Partisan Group"
+  ) +
+  theme_minimal() +
+  scale_color_manual(values = c("Democrat" = "blue", "Republican" = "red", "Independent" = "darkgreen"))
+
+print(plot_PAPC)
+
+# --- Plot for PAPC2 (Continuous Outcome) ---
+emm_PAPC2 <- emmeans(model_PAPC2, specs = ~ AssignedGroup | DEM8)
+plot_data_PAPC2 <- as.data.frame(emm_PAPC2)
+
+plot_PAPC2 <- ggplot(plot_data_PAPC2, aes(x = AssignedGroup, y = emmean, color = DEM8, group = DEM8)) +
+  geom_line(size = 1) +
+  geom_point(size = 3) +
+  # CONFIRMED: Uses lower.CL and upper.CL for continuous outcomes
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.2) +
+  labs(
+    title = "Interaction Plot: AssignedGroup (1, 2, 3) and DEM8 on PAPC2",
+    x = "Assigned Group (Non-linear Effect)",
+    y = "Estimated Marginal Mean of PAPC2",
+    color = "Partisan Group"
+  ) +
+  theme_minimal() +
+  scale_color_manual(values = c("Democrat" = "blue", "Republican" = "red", "Independent" = "darkgreen"))
+
+print(plot_PAPC2)
+
+# --- Plot for PAPC3_1 (Continuous Outcome) ---
+emm_PAPC3_1 <- emmeans(model_PAPC3_1, specs = ~ AssignedGroup | DEM8)
+plot_data_PAPC3_1 <- as.data.frame(emm_PAPC3_1)
+
+plot_PAPC3_1 <- ggplot(plot_data_PAPC3_1, aes(x = AssignedGroup, y = emmean, color = DEM8, group = DEM8)) +
+  geom_line(size = 1) +
+  geom_point(size = 3) +
+  # CONFIRMED: Uses lower.CL and upper.CL for continuous outcomes
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.2) +
+  labs(
+    title = "Interaction Plot: AssignedGroup (1, 2, 3) and DEM8 on PAPC3_1",
+    x = "Assigned Group (Non-linear Effect)",
+    y = "Estimated Marginal Mean of PAPC3_1",
+    color = "Partisan Group"
+  ) +
+  theme_minimal() +
+  scale_color_manual(values = c("Democrat" = "blue", "Republican" = "red", "Independent" = "darkgreen"))
+
+print(plot_PAPC3_1)
+
+# --- Plot for DR (Continuous Outcome) ---
+emm_DR <- emmeans(model_DR, specs = ~ AssignedGroup | DEM8)
+plot_data_DR <- as.data.frame(emm_DR)
+
+plot_DR <- ggplot(plot_data_DR, aes(x = AssignedGroup, y = emmean, color = DEM8, group = DEM8)) +
+  geom_line(size = 1) +
+  geom_point(size = 3) +
+  # CONFIRMED: Uses lower.CL and upper.CL for continuous outcomes
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.2) +
+  labs(
+    title = "Interaction Plot: AssignedGroup (1, 2, 3) and DEM8 on DR",
+    x = "Assigned Group (Non-linear Effect)",
+    y = "Estimated Marginal Mean of DR",
+    color = "Partisan Group"
+  ) +
+  theme_minimal() +
+  scale_color_manual(values = c("Democrat" = "blue", "Republican" = "red", "Independent" = "darkgreen"))
+
+print(plot_DR)
+
+# --- Plot for SN (Dichotomous Outcome) ---
+# Assuming model_SN was run successfully on dat_filtered
+emm_SN <- emmeans(model_SN, specs = ~ AssignedGroup | DEM8, type = "response")
+plot_data_SN <- as.data.frame(emm_SN)
+
+plot_SN <- ggplot(plot_data_SN, aes(x = AssignedGroup, y = prob, color = DEM8, group = DEM8)) +
+  geom_line(size = 1) +
+  geom_point(size = 3) +
+  # CORRECTED: Uses asymp.LCL and asymp.UCL for logistic regression type="response"
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
+  labs(
+    title = "Interaction Plot: AssignedGroup (1, 2, 3) and DEM8 on SN (Probability)",
+    x = "Assigned Group (Non-linear Effect)",
+    y = "Predicted Probability of SN = Yes",
+    color = "Partisan Group"
+  ) +
+  theme_minimal() +
+  scale_color_manual(values = c("Democrat" = "blue", "Republican" = "red", "Independent" = "darkgreen")) +
+  ylim(0, 1)
+
+print(plot_SN)
+```
+
+```{r}
+# --- 1. Full Quadratic Interaction Models for Continuous Outcomes ---
+
+# PAPC Full Quadratic Interaction Model (Independent as Reference)
+model_PAPC_quad_int_indref <- lm(PAPC ~ (AssignedGroup_N + I(AssignedGroup_N^2)) * DEM8, data = dat)
+summary(model_PAPC_quad_int_indref)
+
+# PAPC2 Full Quadratic Interaction Model (Independent as Reference)
+model_PAPC2_quad_int_indref <- lm(PAPC2 ~ (AssignedGroup_N + I(AssignedGroup_N^2)) * DEM8, data = dat)
+summary(model_PAPC2_quad_int_indref)
+
+# PAPC3_1 Full Quadratic Interaction Model (Independent as Reference)
+model_PAPC3_1_quad_int_indref <- lm(PAPC3_1 ~ (AssignedGroup_N + I(AssignedGroup_N^2)) * DEM8, data = dat)
+summary(model_PAPC3_1_quad_int_indref)
+
+# DR Full Quadratic Interaction Model (Independent as Reference)
+model_DR_quad_int_indref <- lm(DR ~ (AssignedGroup_N + I(AssignedGroup_N^2)) * DEM8, data = dat)
+summary(model_DR_quad_int_indref)
+
+# --- 2. Full Quadratic Interaction Model for Dichotomous Outcome (SN) ---
+
+# SN Full Quadratic Interaction Model (Logistic Regression, Independent as Reference)
+model_SN_quad_int_indref <- glm(SN ~ (AssignedGroup_N + I(AssignedGroup_N^2)) * DEM8, 
+                                data = dat, 
+                                family = binomial(link = "logit"))
+summary(model_SN_quad_int_indref)
+```
+```{r}
+##CCP2 = Climate Policy
+
+# --- Compute CCP2_1 if not already ---
+dat$CCP2_1 <- rowMeans(dat[, c("CCP2_1_1", "CCP2_1_2", "CCP2_1_3", "CCP2_1_4", "CCP2_1_5", "CCP2_1_6", "CCP2_1_7", "CCP2_1_8", "CCP2_1_9")], na.rm = TRUE)
+
+dat$CCP2_2 <- rowMeans(dat[, c("CCP2_2_1", "CCP2_2_2", "CCP2_2_3", "CCP2_2_4", "CCP2_2_5", "CCP2_2_6", "CCP2_2_7", "CCP2_2_8", "CCP2_2_9")], na.rm = TRUE)
+```
+
+```{r}
+library(dplyr)
+library(transport)  # for wasserstein1d
+
+# Filter data: keep only Democrats and Republicans
+dat_filtered <- dat %>%
+  filter(DEM8 %in% c("Democrat", "Republican"))
+
+# Compute Wasserstein distances by Group (Dem vs. Rep)
+wd_results <- dat_filtered %>%
+  group_by(AssignedGroup) %>%
+  summarise(
+    WD_CCP2_1 = wasserstein1d(CCP2_1[DEM8 == "Democrat"],
+                              CCP2_1[DEM8 == "Republican"]),
+    WD_CCP2_2 = wasserstein1d(CCP2_2[DEM8 == "Democrat"],
+                              CCP2_2[DEM8 == "Republican"]),
+    WD_Change = WD_CCP2_2 - WD_CCP2_1
+  )
+
+wd_results
+```
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(transport)  # for wasserstein1d
+
+# Filter data: keep only Democrats and Republicans
+dat_filtered <- dat %>%
+  filter(DEM8 %in% c("Democrat", "Republican"))
+
+# Compute Wasserstein distances by Group (Dem vs. Rep)
+wd_results <- dat_filtered %>%
+  group_by(AssignedGroup) %>%
+  summarise(
+    WD_CCP2_1 = wasserstein1d(CCP2_1[DEM8 == "Democrat"],
+                              CCP2_1[DEM8 == "Republican"]),
+    WD_CCP2_2 = wasserstein1d(CCP2_2[DEM8 == "Democrat"],
+                              CCP2_2[DEM8 == "Republican"]),
+    WD_Change = WD_CCP2_2 - WD_CCP2_1
+  )
+
+# Convert data to long format for plotting
+dat_long <- dat_filtered %>%
+  pivot_longer(cols = c(CCP2_1, CCP2_2),
+               names_to = "Time", values_to = "CCP2") %>%
+  mutate(Time = factor(Time, levels = c("CCP2_1", "CCP2_2")),
+         DEM8 = factor(DEM8, levels = c("Democrat", "Republican")))
+
+# Reshape Wasserstein results for annotation
+wd_long <- wd_results %>%
+  select(AssignedGroup, WD_CCP2_1, WD_CCP2_2) %>%
+  pivot_longer(cols = starts_with("WD_"),
+               names_to = "Time", values_to = "WD") %>%
+  mutate(Time = ifelse(Time == "WD_CCP2_1", "CCP2_1", "CCP2_2"))
+
+# Plot density distributions by Group and Time
+ggplot(dat_long, aes(x = CCP2, fill = DEM8, color = DEM8)) +
+  geom_density(alpha = 0.3, adjust = 1.2) +
+  facet_grid(Time ~ AssignedGroup, scales = "free") +
+  geom_text(
+    data = wd_long,
+    aes(x = -Inf, y = Inf, label = paste0("W = ", round(WD, 3))),
+    hjust = -0.1, vjust = 1.3, size = 3.5, inherit.aes = FALSE
+  ) +
+  scale_fill_manual(values = c("Democrat" = "#1f77b4", "Republican" = "#d62728")) +
+  scale_color_manual(values = c("Democrat" = "#1f77b4", "Republican" = "#d62728")) +
+  labs(
+    title = "Partisan Distributions of CCP2 by AssignedGroup and Time",
+    subtitle = "Democrats (blue) vs. Republicans (red)",
+    x = "CCP2 value",
+    y = "Density"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    strip.text = element_text(size = 12, face = "bold"),
+    legend.position = "top",
+    panel.spacing = unit(1, "lines")
+  )
+```
+
+
+```{r}
+ggplot(dat_long, aes(x = DEM8, y = CCP2, fill = DEM8)) +
+  geom_violin(alpha = 0.4, trim = FALSE) +
+  geom_boxplot(width = 0.15, outlier.shape = NA, color = "black") +
+  facet_grid(Time ~ AssignedGroup, scales = "free_y") +
+  scale_fill_manual(values = c("Democrat" = "#1f77b4", "Republican" = "#d62728")) +
+  labs(title = "Distribution of CCP4 by AssignedGroup and Partisanship",
+       subtitle = "Violin plots for CCP2_1 and CCP2_2 by condition",
+       x = "Partisanship", y = "CCP2 value") +
+  theme_minimal(base_size = 13) +
+  theme(
+    strip.text = element_text(size = 12, face = "bold"),
+    legend.position = "none",
+    panel.spacing = unit(1, "lines")
+  )
+
+```
+
+
+```{r}
+library(lme4)
+library(lmerTest)
+
+# Reshape data for repeated measure
+dat_long <- dat %>%
+  tidyr::pivot_longer(cols = c(CCP2_1, CCP2_2),
+                      names_to = "Time", values_to = "CCP2") %>%
+  mutate(Time = factor(Time, levels = c("CCP2_1", "CCP2_2")))
+
+# Model with interaction
+model <- lmer(CCP2 ~ AssignedGroup * DEM8 * Time + (1|ResponseId), data = dat_long)  # assuming ID identifies participants
+anova(model)
+```
+
+
+```{r}
+##CCP3 = Climate Issue Involvement
+
+# --- Compute DR_M if not already ---
+dat$CCP3_1 <- rowMeans(dat[, c("CCP3_1_1", "CCP3_1_2", "CCP3_1_3")], na.rm = TRUE)
+
+dat$CCP3_2 <- rowMeans(dat[, c("CCP3_2_1", "CCP3_2_2", "CCP3_2_3")], na.rm = TRUE)
+```
+
+```{r}
+library(dplyr)
+library(transport)  # for wasserstein1d
+
+# Filter data: keep only Democrats and Republicans
+dat_filtered <- dat %>%
+  filter(DEM8 %in% c("Democrat", "Republican"))
+
+# Compute Wasserstein distances by Group (Dem vs. Rep)
+wd_results <- dat_filtered %>%
+  group_by(AssignedGroup) %>%
+  summarise(
+    WD_CCP3_1 = wasserstein1d(CCP3_1[DEM8 == "Democrat"],
+                              CCP3_1[DEM8 == "Republican"]),
+    WD_CCP3_2 = wasserstein1d(CCP3_2[DEM8 == "Democrat"],
+                              CCP3_2[DEM8 == "Republican"]),
+    WD_Change = WD_CCP3_2 - WD_CCP3_1
+  )
+
+wd_results
+```
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(transport)  # for wasserstein1d
+
+# Filter data: keep only Democrats and Republicans
+dat_filtered <- dat %>%
+  filter(DEM8 %in% c("Democrat", "Republican"))
+
+# Compute Wasserstein distances by Group (Dem vs. Rep)
+wd_results <- dat_filtered %>%
+  group_by(AssignedGroup) %>%
+  summarise(
+    WD_CCP3_1 = wasserstein1d(CCP3_1[DEM8 == "Democrat"],
+                              CCP3_1[DEM8 == "Republican"]),
+    WD_CCP3_2 = wasserstein1d(CCP3_2[DEM8 == "Democrat"],
+                              CCP3_2[DEM8 == "Republican"]),
+    WD_Change = WD_CCP3_2 - WD_CCP3_1
+  )
+
+# Convert data to long format for plotting
+dat_long <- dat_filtered %>%
+  pivot_longer(cols = c(CCP3_1, CCP3_2),
+               names_to = "Time", values_to = "CCP3") %>%
+  mutate(Time = factor(Time, levels = c("CCP3_1", "CCP3_2")),
+         DEM8 = factor(DEM8, levels = c("Democrat", "Republican")))
+
+# Reshape Wasserstein results for annotation
+wd_long <- wd_results %>%
+  select(AssignedGroup, WD_CCP3_1, WD_CCP3_2) %>%
+  pivot_longer(cols = starts_with("WD_"),
+               names_to = "Time", values_to = "WD") %>%
+  mutate(Time = ifelse(Time == "WD_CCP3_1", "CCP3_1", "CCP3_2"))
+
+# Plot density distributions by Group and Time
+ggplot(dat_long, aes(x = CCP3, fill = DEM8, color = DEM8)) +
+  geom_density(alpha = 0.3, adjust = 1.2) +
+  facet_grid(Time ~ AssignedGroup, scales = "free") +
+  geom_text(
+    data = wd_long,
+    aes(x = -Inf, y = Inf, label = paste0("W = ", round(WD, 3))),
+    hjust = -0.1, vjust = 1.3, size = 3.5, inherit.aes = FALSE
+  ) +
+  scale_fill_manual(values = c("Democrat" = "#1f77b4", "Republican" = "#d62728")) +
+  scale_color_manual(values = c("Democrat" = "#1f77b4", "Republican" = "#d62728")) +
+  labs(
+    title = "Partisan Distributions of CCP3 by AssignedGroup and Time",
+    subtitle = "Democrats (blue) vs. Republicans (red)",
+    x = "CCP3 value",
+    y = "Density"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    strip.text = element_text(size = 12, face = "bold"),
+    legend.position = "top",
+    panel.spacing = unit(1, "lines")
+  )
+```
+
+
+```{r}
+ggplot(dat_long, aes(x = DEM8, y = CCP3, fill = DEM8)) +
+  geom_violin(alpha = 0.4, trim = FALSE) +
+  geom_boxplot(width = 0.15, outlier.shape = NA, color = "black") +
+  facet_grid(Time ~ AssignedGroup, scales = "free_y") +
+  scale_fill_manual(values = c("Democrat" = "#1f77b4", "Republican" = "#d62728")) +
+  labs(title = "Distribution of CCP3 by AssignedGroup and Partisanship",
+       subtitle = "Violin plots for CCP3_1 and CCP3_2 by condition",
+       x = "Partisanship", y = "CCP3 value") +
+  theme_minimal(base_size = 13) +
+  theme(
+    strip.text = element_text(size = 12, face = "bold"),
+    legend.position = "none",
+    panel.spacing = unit(1, "lines")
+  )
+
+```
+
+```{r}
+library(lme4)
+library(lmerTest)
+
+# Reshape data for repeated measure
+dat_long <- dat %>%
+  tidyr::pivot_longer(cols = c(CCP3_1, CCP3_2),
+                      names_to = "Time", values_to = "CCP3") %>%
+  mutate(Time = factor(Time, levels = c("CCP3_1", "CCP3_2")))
+
+# Model with interaction
+model <- lmer(CCP3 ~ AssignedGroup * DEM8 * Time + (1|ResponseId), data = dat_long)  # assuming ID identifies participants
+anova(model)
+```
+```{r}
+library(dplyr)
+library(transport)  # for wasserstein1d
+
+# Filter data: keep only Democrats and Republicans
+dat_filtered <- dat %>%
+  filter(DEM8 %in% c("Democrat", "Republican"))
+
+# Compute Wasserstein distances by Group (Dem vs. Rep)
+wd_results <- dat_filtered %>%
+  group_by(AssignedGroup) %>%
+  summarise(
+    WD_CCP1_1 = wasserstein1d(CCP1_1[DEM8 == "Democrat"],
+                              CCP1_1[DEM8 == "Republican"]),
+    WD_CCP1_2 = wasserstein1d(CCP1_2[DEM8 == "Democrat"],
+                              CCP1_2[DEM8 == "Republican"]),
+    WD_Change = WD_CCP1_2 - WD_CCP1_1
+  )
+
+wd_results
+```
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(transport)  # for wasserstein1d
+
+# Filter data: keep only Democrats and Republicans
+dat_filtered <- dat %>%
+  filter(DEM8 %in% c("Democrat", "Republican"))
+
+# Compute Wasserstein distances by Group (Dem vs. Rep)
+wd_results <- dat_filtered %>%
+  group_by(AssignedGroup) %>%
+  summarise(
+    WD_CCP1_1 = wasserstein1d(CCP1_1[DEM8 == "Democrat"],
+                              CCP1_1[DEM8 == "Republican"]),
+    WD_CCP1_2 = wasserstein1d(CCP1_2[DEM8 == "Democrat"],
+                              CCP1_2[DEM8 == "Republican"]),
+    WD_Change = WD_CCP1_2 - WD_CCP1_1
+  )
+
+# Convert data to long format for plotting
+dat_long <- dat_filtered %>%
+  pivot_longer(cols = c(CCP1_1, CCP1_2),
+               names_to = "Time", values_to = "CCP1") %>%
+  mutate(Time = factor(Time, levels = c("CCP1_1", "CCP1_2")),
+         DEM8 = factor(DEM8, levels = c("Democrat", "Republican")))
+
+# Reshape Wasserstein results for annotation
+wd_long <- wd_results %>%
+  select(AssignedGroup, WD_CCP1_1, WD_CCP1_2) %>%
+  pivot_longer(cols = starts_with("WD_"),
+               names_to = "Time", values_to = "WD") %>%
+  mutate(Time = ifelse(Time == "WD_CCP1_1", "CCP1_1", "CCP1_2"))
+
+# Plot density distributions by Group and Time
+ggplot(dat_long, aes(x = CCP1, fill = DEM8, color = DEM8)) +
+  geom_density(alpha = 0.3, adjust = 1.2) +
+  facet_grid(Time ~ AssignedGroup, scales = "free") +
+  geom_text(
+    data = wd_long,
+    aes(x = -Inf, y = Inf, label = paste0("W = ", round(WD, 3))),
+    hjust = -0.1, vjust = 1.3, size = 3.5, inherit.aes = FALSE
+  ) +
+  scale_fill_manual(values = c("Democrat" = "#1f77b4", "Republican" = "#d62728")) +
+  scale_color_manual(values = c("Democrat" = "#1f77b4", "Republican" = "#d62728")) +
+  labs(
+    title = "Partisan Distributions of CCP1 by AssignedGroup and Time",
+    subtitle = "Democrats (blue) vs. Republicans (red)",
+    x = "CCP3 value",
+    y = "Density"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    strip.text = element_text(size = 12, face = "bold"),
+    legend.position = "top",
+    panel.spacing = unit(1, "lines")
+  )
+```
+
+```{r}
+library(lme4)
+library(lmerTest)
+
+# Reshape data for repeated measure
+dat_long <- dat %>%
+  tidyr::pivot_longer(cols = c(CCP1_1, CCP1_2),
+                      names_to = "Time", values_to = "CCP1") %>%
+  mutate(Time = factor(Time, levels = c("CCP1_1", "CCP1_2")))
+
+# Model with interaction
+model <- lmer(CCP1 ~ AssignedGroup * DEM8 * Time + (1|ResponseId), data = dat_long)  # assuming ID identifies participants
+anova(model)
+```
+
+```{r}
+#CROSS TAB https://chatgpt.com/share/690ce76b-d350-8010-be62-d5eff02fa27f  
+# Read the CSV file into a data frame named 'dat'
+dat <- read.csv("pilot_1.csv")
+
+# Make sure factors only have existing levels
+dat$DEM8 <- factor(dat$DEM8)
+dat$SN <- factor(dat$SN)
+dat$AssignedGroup <- factor(dat$AssignedGroup)
+
+# Drop unused factor levels
+dat_clean <- droplevels(dat[, c("DEM8", "SN", "AssignedGroup")])
+
+# Check that each factor has >=2 levels
+sapply(dat_clean, function(x) length(levels(x)))
+
+```
+
+```{r}
+# 1) DEM8 -> SN
+model1 <- glm(SN ~ DEM8, data = dat_clean, family = binomial)
+summary(model1)
+```
+
+```{r}
+# 2) DEM8 -> SN moderated by AssignedGroup
+model2 <- glm(SN ~ DEM8 * AssignedGroup, data = dat_clean, family = binomial)
+summary(model2)
+```
+
+```{r}
+# DEM8: 1 = Democrats, 2 = Republicans, 3 = Independents
+dat$DEM8 <- factor(dat$DEM8,
+                   levels = c(1, 2, 3),
+                   labels = c("Democrats", "Republicans", "Independents"))
+
+# SN: 1 = Yes, 0 = No
+dat$SN <- factor(dat$SN,
+                 levels = c(0, 1),
+                 labels = c("No", "Yes"))
+# Frequency table
+table(dat$DEM8, dat$SN)
+
+# Row percentages
+prop.table(table(dat$DEM8, dat$SN), margin = 1)
+
+```
+
+```{r}
+# Set reference category if desired
+dat$DEM8 <- relevel(dat$DEM8, ref = "Democrats")
+dat$SN <- relevel(dat$SN, ref = "No")
+
+# Fit logistic regression
+model1 <- glm(SN ~ DEM8, data = dat, family = binomial)
+summary(model1)
+```
+```{r}
+# Odds ratios with 95% confidence intervals
+exp(cbind(OR = coef(model1), confint(model1)))
+```
+
+```{r}
+# Logistic regression with interaction
+model2 <- glm(SN ~ DEM8 * AssignedGroup, data = dat, family = binomial)
+summary(model2)
+
+exp(cbind(OR = coef(model2), confint(model2)))
+
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# Create new data frame for all combinations
+newdata <- expand.grid(
+  DEM8 = levels(dat$DEM8),
+  AssignedGroup = levels(dat$AssignedGroup)
+)
+
+# Get predicted probabilities
+newdata$prob <- predict(model2, newdata, type = "response")
+
+# Plot predicted probabilities
+ggplot(newdata, aes(x = DEM8, y = prob, fill = AssignedGroup)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  ylab("Predicted Probability of SN = Yes") +
+  xlab("DEM8") +
+  labs(fill = "AssignedGroup") +
+  theme_minimal()
+
+```
+
+```{r}
+# INDIVIDUAL LEVEL EFFECT ON CLIMATE PERCPETION
+
+# https://gemini.google.com/share/afc930c52599 
+# 1. Load necessary library
+library(dplyr)
+
+# 2. Compute absolute difference variables (e.g., CCP1_1a = |4 - CCP1_1|)
+# and the group difference variables (e.g., CCP1G = CCP1_1a - CCP1_2a).
+##CCP2 = Climate Policy
+
+dat$CCP2_1 <- rowMeans(dat[, c("CCP2_1_1", "CCP2_1_2", "CCP2_1_3", "CCP2_1_4", "CCP2_1_5", "CCP2_1_6", "CCP2_1_7", "CCP2_1_8", "CCP2_1_9")], na.rm = TRUE)
+
+dat$CCP2_2 <- rowMeans(dat[, c("CCP2_2_1", "CCP2_2_2", "CCP2_2_3", "CCP2_2_4", "CCP2_2_5", "CCP2_2_6", "CCP2_2_7", "CCP2_2_8", "CCP2_2_9")], na.rm = TRUE)
+
+dat$CCP3_1a <- rowMeans(dat[, c("CCP3_1_1", "CCP3_1_2", "CCP3_1_3")], na.rm = TRUE)
+
+dat$CCP3_2a <- rowMeans(dat[, c("CCP3_2_1", "CCP3_2_2", "CCP3_2_3")], na.rm = TRUE)
+
+dat <- dat %>%
+  mutate(
+    # Absolute difference variables
+    CCP1_1a = abs(4 - CCP1_1),
+    CCP1_2a = abs(4 - CCP1_2),
+    CCP2_1a = abs(4 - CCP2_1),
+    CCP2_2a = abs(4 - CCP2_2),
+  #for CCP3 NO ABSOLUTE VALUE  
+    # Group difference variables
+    CCP1G = CCP1_1a - CCP1_2a,
+    CCP2G = CCP2_1a - CCP2_2a,
+    CCP3G = CCP3_1a - CCP3_2a
+  )
+
+# Convert AssignedGroup to a factor for proper analysis if it isn't already
+dat$AssignedGroup <- as.factor(dat$AssignedGroup)
+```
+
+```{r}
+model_AR1 <- lm(CCP1_2a ~ AssignedGroup + CCP1_1a, data = dat)
+summary(model_AR1)
+
+model_AR2 <- lm(CCP2_2a ~ AssignedGroup + CCP2_1a, data = dat)
+summary(model_AR2)
+
+model_AR3 <- lm(CCP3_2a ~ AssignedGroup + CCP3_1a, data = dat)
+summary(model_AR3)
+
+#IF THE RESULTS SHOW NEGATIVE COEFFICIENT, GROUP MAKES CCP CLOSER TO THE CENTER (MINUS in ABSOLUTE VALUE).-> LESS POLARIZED
+#IF THE RESULTS SHOW POSITIVE COEFFICIENT, GROUP MAKES CCP FARTHER TO THE CENTER (MINUS in ABSOLUTE VALUE). -> MORE POLARIZED
+#INTERCEPT is GROUP 0 
+```
+
+```{r}
+# 1. Load necessary libraries
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+
+# 2. Select and Reshape Data from Wide to Long Format
+plot_dat <- dat %>%
+  select(AssignedGroup, CCP1_1a, CCP1_2a, CCP2_1a, CCP2_2a, CCP3_1a, CCP3_2a)
+
+long_plot_dat <- plot_dat %>%
+  pivot_longer(
+    cols = c(CCP1_1a, CCP1_2a, CCP2_1a, CCP2_2a, CCP3_1a, CCP3_2a),
+    names_to = "Variable",
+    values_to = "Score"
+  ) %>%
+  
+  # Create a 'Measure' variable (CCP1, CCP2, CCP3)
+  mutate(
+    Measure = substr(Variable, 1, 4), # Extracts 'CCP1', 'CCP2', or 'CCP3'
+    # Create a 'Time' variable (1a or 2a)
+    Time = substr(Variable, 5, 6)      # Extracts '1a' or '2a'
+  )
+
+# 3. Create the Line Plot (This is where 'line_plot' is defined)
+line_plot <- ggplot(long_plot_dat, aes(x = Time, y = Score, group = interaction(AssignedGroup, Measure), color = AssignedGroup)) +
+  
+  stat_summary(fun = "mean", 
+               geom = "point", 
+               size = 3) +
+  stat_summary(fun = "mean", 
+               geom = "line", 
+               aes(linetype = Measure), 
+               linewidth = 1) +
+  
+  labs(
+    title = "Mean CCP Scores Across Time by Assigned Group and Measure",
+    x = "Time Point",
+    y = "Absolute Difference Score (|4 - CCP|)",
+    color = "Assigned Group",
+    linetype = "Measure"
+  ) +
+  scale_x_discrete(labels = c("1a" = "Time 1", "2a" = "Time 2")) +
+  theme_minimal()
+  
+# 4. Print the Plot (This is where the error occurs if the object hasn't been defined)
+print(line_plot)
+
+#IF the LINE goes DOWN, IT MEANS OPINION CLOSER TO THE CENTER, -> LESS POLARIZED (less extreme)
+#IF the LINE goes UP, IT MEANS OPINION FATHER TO THE CENTER. -> MORE POLARIZED (more extreme)
+#CCP1 -> Paris Agreement 
+#CCP2 -> Climate Policy
+#CCP3 -> Climate issue involvement
+```
+```{r}
+
+## ----------------------------------------------------
+## I. Define Plotting Function
+## ----------------------------------------------------
+
+# This function takes the data and variable names, reshapes the data for one measure, 
+# and creates the line plot.
+create_ar_plot <- function(data, time1_var, time2_var, measure_name) {
+  
+  # Reshape data for plotting the change in a single measure
+  plot_data <- data %>%
+    select(AssignedGroup, !!sym(time1_var), !!sym(time2_var)) %>%
+    pivot_longer(
+      cols = c(!!sym(time1_var), !!sym(time2_var)), 
+      names_to = "Time", 
+      values_to = "Score"
+    ) %>%
+    mutate(
+      Time = factor(Time, levels = c(time1_var, time2_var), labels = c("Time 1", "Time 2"))
+    )
+
+  # Create the line plot
+  p <- ggplot(plot_data, aes(x = Time, y = Score, group = AssignedGroup, color = AssignedGroup)) +
+    stat_summary(fun = "mean", geom = "point", size = 3) +
+    stat_summary(fun = "mean", geom = "line", linewidth = 1) +
+    labs(
+      title = paste("AR Plot:", measure_name, "Change Over Time"),
+      x = "Time Point",
+      y = "Mean Absolute Difference Score",
+      color = "Assigned Group"
+    ) +
+    theme_minimal()
+  
+  # Print the plot
+  print(p)
+  # Return an invisible NULL to prevent R from printing the function result
+  return(invisible(NULL))
+}
+
+## ----------------------------------------------------
+## II. Generate Three Plots Sequentially
+## ----------------------------------------------------
+
+cat("Generating 3 Autoregressive Regression Line Plots...\n")
+
+# 1. CCP1 Plot
+create_ar_plot(dat, "CCP1_1a", "CCP1_2a", "CCP1")
+
+# 2. CCP2 Plot
+create_ar_plot(dat, "CCP2_1a", "CCP2_2a", "CCP2")
+
+# 3. CCP3 Plot
+create_ar_plot(dat, "CCP3_1a", "CCP3_2a", "CCP3")
+
+cat("Plot generation complete.\n")
+```
+
+#CLEAR FINDINGS
+#1. GROUP 3 (highest Intsub): 
+#1) MORE Polarized for Paris Agreeement Opinion (stronger opposition)
+#2) Less Polarized for Climate Policy (weaker support for climate policy)
+#3) Weaker Climate Issue Involvement (becoming indifferent to climate issue)
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(ggplot2)
+
+## ----------------------------------------------------
+## I. Data Preparation (Ensure AssignedGroup is Numeric)
+## ----------------------------------------------------
+
+# FIX: Convert the factor directly to its underlying numeric codes (1, 2, 3, ...)
+# We assume 'dat$AssignedGroup' is already defined as a factor.
+dat$AssignedGroup_num <- as.numeric(dat$AssignedGroup)
+
+## ----------------------------------------------------
+## II. Function to Run Model and Plot (CCP1 & CCP2)
+## ----------------------------------------------------
+
+# Define a function to perform the regression and plot for any CCP measure
+run_and_plot_cont_ar <- function(data, outcome_var, covariate_var, measure_name) {
+  
+  # 1. Build the formula dynamically
+  formula_str <- paste(outcome_var, "~ AssignedGroup_num +", covariate_var)
+  
+  # 2. Run the regression model
+  model <- lm(as.formula(formula_str), data = data)
+  
+  # 3. Print the regression summary
+  cat("\n======================================================\n")
+  cat(paste("    REGRESSION SUMMARY (", measure_name, " - AssignedGroup Continuous)\n"))
+  cat("======================================================\n")
+  print(summary(model))
+  
+  # 4. Prepare data for plotting the partial effect
+  mean_covariate <- mean(data[[covariate_var]], na.rm = TRUE)
+  
+  # Create a prediction grid
+  plot_data_pred <- data.frame(
+    AssignedGroup_num = sort(unique(data$AssignedGroup_num)),
+    temp_covariate = mean_covariate # Placeholder for the covariate column
+  )
+  names(plot_data_pred)[2] <- covariate_var # Rename placeholder to actual covariate name
+  
+  # Generate predicted values (the fitted line)
+  plot_data_pred$Predicted_Outcome <- predict(model, newdata = plot_data_pred)
+  
+  # 5. Create the scatter plot with the fitted line
+  plot_cont <- ggplot(data, aes(x = AssignedGroup_num, y = !!sym(outcome_var))) +
+    # Add actual data points
+    geom_point(aes(color = factor(AssignedGroup)), alpha = 0.6, size = 3) +
+    
+    # Add the fitted regression line showing the partial effect
+    geom_line(data = plot_data_pred, aes(y = Predicted_Outcome), 
+              linewidth = 1.2, color = "darkblue") +
+    
+    labs(
+      title = paste("Partial Effect of Continuous AssignedGroup on", measure_name, "Outcome"),
+      subtitle = paste("Controlling for", covariate_var, "(held at mean =", round(mean_covariate, 2), ")"),
+      x = "Assigned Group (Sequential Numeric Code)",
+      y = paste(measure_name, "Outcome Score (", outcome_var, ")"),
+      color = "Assigned Group"
+    ) +
+    # Ensure x-axis shows discrete group numbers clearly
+    scale_x_continuous(breaks = sort(unique(data$AssignedGroup_num))) +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+  
+  print(plot_cont)
+  return(invisible(NULL))
+}
+
+## ----------------------------------------------------
+## III. Execute for CCP1 and CCP2
+## ----------------------------------------------------
+
+# 1. Execute for CCP1
+run_and_plot_cont_ar(dat, "CCP1_2a", "CCP1_1a", "CCP1")
+
+# 2. Execute for CCP2
+run_and_plot_cont_ar(dat, "CCP2_2a", "CCP2_1a", "CCP2")
+```
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(ggplot2)
+
+## ----------------------------------------------------
+## I. Model Fitting
+## ----------------------------------------------------
+
+# 1. FIX: Convert the factor directly to its underlying numeric codes (1, 2, 3, ...)
+# This ensures it is treated as continuous and avoids NA coercion errors.
+# If your group names are "Control", "Treatment1", "Treatment2", the numeric values 
+# will be 1, 2, 3, based on the order of the factor levels.
+dat$AssignedGroup_num <- as.numeric(dat$AssignedGroup)
+
+# 2. Run the autoregressive regression with continuous AssignedGroup
+model_AR3_cont <- lm(CCP3_2a ~ AssignedGroup_num + CCP3_1a, data = dat)
+
+cat("\n======================================================\n")
+cat("          REGRESSION SUMMARY (AssignedGroup Continuous)\n")
+cat("======================================================\n")
+# 3. Print the regression results
+print(summary(model_AR3_cont))
+
+
+## ----------------------------------------------------
+## II. Plotting the Partial Regression Effect
+## ----------------------------------------------------
+
+# 4. Prepare data for plotting the *partial* effect
+mean_CCP3_1a <- mean(dat$CCP3_1a, na.rm = TRUE)
+
+# Create a prediction grid spanning the range of AssignedGroup_num
+plot_data_pred <- data.frame(
+  AssignedGroup_num = sort(unique(dat$AssignedGroup_num)),
+  CCP3_1a = mean_CCP3_1a # Hold covariate at its mean
+)
+
+# Generate predicted values (the fitted line)
+plot_data_pred$Predicted_CCP3_2a <- predict(model_AR3_cont, newdata = plot_data_pred)
+
+# 5. Create the scatter plot with the fitted line
+plot_AR3_cont <- ggplot(dat, aes(x = AssignedGroup_num, y = CCP3_2a)) +
+  # Add actual data points
+  geom_point(aes(color = factor(AssignedGroup)), alpha = 0.6, size = 3) +
+  
+  # Add the fitted regression line showing the partial effect
+  geom_line(data = plot_data_pred, aes(y = Predicted_CCP3_2a), 
+            linewidth = 1.2, color = "darkblue") +
+  
+  labs(
+    title = "Partial Effect of Continuous AssignedGroup on CCP3_2a",
+    subtitle = paste("Controlling for CCP3_1a (held at mean =", round(mean_CCP3_1a, 2), ")"),
+    x = "Assigned Group (Sequential Numeric Code)",
+    y = "CCP3_2a Score (|4 - CCP3_2|)",
+    color = "Assigned Group"
+  ) +
+  # Ensure x-axis shows discrete group numbers clearly
+  scale_x_continuous(breaks = sort(unique(dat$AssignedGroup_num))) +
+  theme_minimal() +
+  theme(legend.position = "bottom") # Keep legend to map numeric code back to factor level
+
+print(plot_AR3_cont)
+```
+
+
+```{r}
+aov_CCP1G <- aov(CCP1G ~ AssignedGroup, data = dat)
+summary(aov_CCP1G)
+
+aov_CCP2G <- aov(CCP2G ~ AssignedGroup, data = dat)
+summary(aov_CCP2G)
+
+aov_CCP3G <- aov(CCP3G ~ AssignedGroup, data = dat)
+summary(aov_CCP3G)
+```
+
+```{r}
+# install.packages("ggplot2") 
+library(ggplot2)
+
+
+# Pairwise comparisons
+cat("\n--- Pairwise Comparisons for CCP1G (Tukey's HSD) ---\n")
+TukeyHSD(aov_CCP1G)
+
+# Pairwise comparisons
+cat("\n--- Pairwise Comparisons for CCP2G (Tukey's HSD) ---\n")
+TukeyHSD(aov_CCP2G)
+
+# Pairwise comparisons
+cat("\n--- Pairwise Comparisons for CCP3G (Tukey's HSD) ---\n")
+TukeyHSD(aov_CCP3G)
+```
+
+```{r}
+plot_CCP1G <- ggplot(dat, aes(x = AssignedGroup, y = CCP1G, fill = AssignedGroup)) +
+  geom_boxplot(alpha = 0.7) +
+  labs(
+    title = "Assigned Group vs. CCP1G Difference Score",
+    x = "Assigned Group",
+    y = "CCP1G (|4-CCP1_1| - |4-CCP1_2|)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none") # Hide redundant legend
+print(plot_CCP1G)
+
+# Use ggsave() to save the plot, e.g., ggsave("CCP1G_boxplot.png", plot_CCP1G)
+```
+
+```{r}
+plot_CCP2G <- ggplot(dat, aes(x = AssignedGroup, y = CCP2G, fill = AssignedGroup)) +
+  geom_boxplot(alpha = 0.7) +
+  labs(
+    title = "Assigned Group vs. CCP2G Difference Score",
+    x = "Assigned Group",
+    y = "CCP2G (|4-CCP2_1| - |4-CCP2_2|)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+print(plot_CCP2G)
+```
+
+```{r}
+plot_CCP3G <- ggplot(dat, aes(x = AssignedGroup, y = CCP3G, fill = AssignedGroup)) +
+  geom_boxplot(alpha = 0.7) +
+  labs(
+    title = "Assigned Group vs. CCP3G Difference Score",
+    x = "Assigned Group",
+    y = "CCP3G (|4-CCP3_1| - |4-CCP3_2|)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+print(plot_CCP3G)
+```
+
+```{r}
+model_AR1_mod <- glm(PAPC ~ AssignedGroup_num + AICOP + AssignedGroup_num:AICOP, data = dat)
+
+cat("\n--- Moderated Model 1: CCP1_2a ---\n")
+summary(model_AR1_mod)
+```
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(ggplot2)
+
+## ----------------------------------------------------
+## I. Rerun/Define the Model
+## ----------------------------------------------------
+
+# Note: The '*' includes the main effects (AssignedGroup_num, AICOP) AND the interaction term.
+model_AR1_mod <- glm(PAPC ~ AssignedGroup_num + AICOP + AssignedGroup_num:AICOP, data = dat)
+
+cat("\n--- Moderated Model Summary ---\n")
+print(summary(model_AR1_mod))
+
+
+## ----------------------------------------------------
+## II. Prepare Data for Simple Slopes Plotting
+## ----------------------------------------------------
+
+# 1. Calculate Mean and SD of the moderator (AICOP)
+mean_AICOP <- mean(dat$AICOP, na.rm = TRUE)
+sd_AICOP <- sd(dat$AICOP, na.rm = TRUE)
+
+# 2. Define three levels for the moderator
+AICOP_levels <- c(
+  Low_AICOP = mean_AICOP - sd_AICOP,
+  Med_AICOP = mean_AICOP,
+  High_AICOP = mean_AICOP + sd_AICOP
+)
+
+# 3. Create a prediction grid: a data frame spanning the predictor's range 
+# at the three selected moderator levels.
+pred_grid <- expand.grid(
+  # Predictor range (AssignedGroup_num)
+  AssignedGroup_num = seq(min(dat$AssignedGroup_num, na.rm = TRUE), 
+                          max(dat$AssignedGroup_num, na.rm = TRUE), 
+                          length.out = 50),
+  # Moderator levels
+  AICOP = AICOP_levels
+)
+
+# 4. Generate predictions using the fitted model
+pred_grid$PAPC_Predicted <- predict(model_AR1_mod, newdata = pred_grid)
+
+# 5. Format the prediction data for clearer plot labels
+plot_data_mod <- pred_grid %>%
+  mutate(AICOP_Level = factor(AICOP, 
+                              levels = AICOP_levels,
+                              labels = c(
+                                paste("Low AICOP (-1 SD: ", round(AICOP_levels[1], 2), ")", sep=""),
+                                paste("Mean AICOP: ", round(AICOP_levels[2], 2), sep=""),
+                                paste("High AICOP (+1 SD: ", round(AICOP_levels[3], 2), ")", sep="")
+                              )))
+
+## ----------------------------------------------------
+## III. Create the Plot
+## ----------------------------------------------------
+
+plot_interaction <- ggplot(data = dat, aes(x = AssignedGroup_num, y = PAPC)) +
+  # Plot the actual data points
+  geom_point(alpha = 0.3) +
+  
+  # Plot the predicted simple slopes (the fitted lines)
+  geom_line(data = plot_data_mod, 
+            aes(y = PAPC_Predicted, color = AICOP_Level), 
+            linewidth = 1.5) +
+  
+  labs(
+    title = "Interaction of AssignedGroup (Cont.) and AICOP on PAPC",
+    subtitle = "Simple Slopes Analysis: Predicted PAPC at Three Levels of AICOP",
+    x = "Assigned Group (Continuous Numeric Code)",
+    y = "PAPC Score",
+    color = "AICOP Level"
+  ) +
+  scale_x_continuous(breaks = sort(unique(dat$AssignedGroup_num))) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+print(plot_interaction)
+```
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(ggplot2)
+
+## ----------------------------------------------------
+## I. Model Fitting (PAPC ~ AssignedGroup_num)
+## ----------------------------------------------------
+
+# Fit the simple linear regression model
+model_PAPC_simple <- glm(PAPC ~ AssignedGroup_num, data = dat)
+
+cat("\n======================================================\n")
+cat("          REGRESSION SUMMARY (PAPC ~ AssignedGroup_num)\n")
+cat("======================================================\n")
+# Print the regression results
+print(summary(model_PAPC_simple))
+
+
+## ----------------------------------------------------
+## II. Plotting the Simple Regression Line
+## ----------------------------------------------------
+
+# 1. Create a prediction grid spanning the range of AssignedGroup_num
+plot_data_pred_simple <- data.frame(
+  AssignedGroup_num = seq(min(dat$AssignedGroup_num, na.rm = TRUE), 
+                          max(dat$AssignedGroup_num, na.rm = TRUE), 
+                          length.out = 100)
+)
+
+# 2. Generate predicted values (the fitted line)
+plot_data_pred_simple$Predicted_PAPC <- predict(model_PAPC_simple, newdata = plot_data_pred_simple)
+
+# 3. Create the scatter plot with the fitted line
+plot_PAPC_simple <- ggplot(dat, aes(x = AssignedGroup_num, y = PAPC)) +
+  # Add actual data points, colored by the original factor group for context
+  geom_point(aes(color = factor(AssignedGroup)), alpha = 0.6, size = 3) +
+  
+  # Add the fitted regression line
+  geom_line(data = plot_data_pred_simple, aes(y = Predicted_PAPC), 
+            linewidth = 1.2, color = "darkblue") +
+  
+  labs(
+    title = "Regression of PAPC on Assigned Group (Continuous)",
+    subtitle = paste("Fitted Model: PAPC ~ AssignedGroup_num"),
+    x = "Assigned Group (Sequential Numeric Code)",
+    y = "PAPC Score",
+    color = "Assigned Group"
+  ) +
+  # Ensure x-axis shows discrete group numbers clearly
+  scale_x_continuous(breaks = sort(unique(dat$AssignedGroup_num))) +
+  theme_minimal() +
+  theme(legend.position = "bottom") 
+
+print(plot_PAPC_simple)
+```
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(ggplot2)
+
+## ----------------------------------------------------
+## I. Statistical Examination (Quadratic Model)
+## ----------------------------------------------------
+
+# 1. Create the quadratic term (AssignedGroup_num squared)
+dat$AssignedGroup_num_sq <- dat$AssignedGroup_num^2
+
+# 2. Fit the quadratic regression model
+model_PAPC_quad <- lm(PAPC ~ AssignedGroup_num + AssignedGroup_num_sq, data = dat)
+
+cat("\n======================================================\n")
+cat(" REGRESSION SUMMARY (PAPC ~ AssignedGroup_num + AssignedGroup_num^2)\n")
+cat("======================================================\n")
+print(summary(model_PAPC_quad))
+
+
+## ----------------------------------------------------
+## II. Visual Examination (Quadratic Curve Plot with Y-axis Limits)
+## ----------------------------------------------------
+
+# 1. Create a prediction grid spanning the range of AssignedGroup_num
+plot_data_pred_quad <- data.frame(
+  AssignedGroup_num = seq(min(dat$AssignedGroup_num, na.rm = TRUE), 
+                          max(dat$AssignedGroup_num, na.rm = TRUE), 
+                          length.out = 100)
+)
+
+# 2. Add the squared term to the prediction grid
+plot_data_pred_quad$AssignedGroup_num_sq <- plot_data_pred_quad$AssignedGroup_num^2
+
+# 3. Generate predicted values (the fitted curve)
+plot_data_pred_quad$Predicted_PAPC <- predict(model_PAPC_quad, newdata = plot_data_pred_quad)
+
+# 4. Create the scatter plot with the fitted curve
+plot_PAPC_quad <- ggplot(dat, aes(x = AssignedGroup_num, y = PAPC)) +
+  # Add actual data points
+  geom_point(aes(color = factor(AssignedGroup)), alpha = 0.6, size = 3) +
+  
+  # Add the fitted quadratic curve
+  geom_line(data = plot_data_pred_quad, aes(y = Predicted_PAPC), 
+            linewidth = 1.2, color = "darkred") +
+  
+  # **SET THE Y-AXIS LIMITS**
+  ylim(3, 7) + 
+  
+  labs(
+    title = "Quadratic Regression of PAPC on Assigned Group (Y-axis 3 to 7)",
+    subtitle = "Model includes: AssignedGroup_num and (AssignedGroup_num)^2",
+    x = "Assigned Group (Sequential Numeric Code)",
+    y = "PAPC Score",
+    color = "Assigned Group"
+  ) +
+  # Ensure x-axis shows discrete group numbers clearly
+  scale_x_continuous(breaks = sort(unique(dat$AssignedGroup_num))) +
+  theme_minimal() +
+  theme(legend.position = "bottom") 
+
+print(plot_PAPC_quad)
+```
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(ggplot2)
+
+## ----------------------------------------------------
+## I. Statistical Examination (Quadratic Model)
+## ----------------------------------------------------
+
+# 1. Create the quadratic term (AssignedGroup_num squared)
+dat$AssignedGroup_num_sq <- dat$AssignedGroup_num^2
+
+# 2. Fit the quadratic regression model (Note: The model remains continuous)
+model_PAPC_quad <- lm(PAPC ~ AssignedGroup_num + AssignedGroup_num_sq, data = dat)
+
+cat("\n======================================================\n")
+cat(" REGRESSION SUMMARY (PAPC ~ AssignedGroup_num + AssignedGroup_num^2)\n")
+cat("======================================================\n")
+print(summary(model_PAPC_quad))
+
+## ----------------------------------------------------
+## II. Visual Examination (Quadratic Curve Plot with Violin Plots)
+## ----------------------------------------------------
+
+# 1. Create a prediction grid spanning the range of AssignedGroup_num (No change)
+plot_data_pred_quad <- data.frame(
+  AssignedGroup_num = seq(min(dat$AssignedGroup_num, na.rm = TRUE), 
+                          max(dat$AssignedGroup_num, na.rm = TRUE), 
+                          length.out = 100)
+)
+
+# 2. Add the squared term to the prediction grid
+plot_data_pred_quad$AssignedGroup_num_sq <- plot_data_pred_quad$AssignedGroup_num^2
+
+# 3. Generate predicted values (the fitted curve)
+plot_data_pred_quad$Predicted_PAPC <- predict(model_PAPC_quad, newdata = plot_data_pred_quad)
+
+# 4. Create the scatter plot with the fitted curve
+plot_PAPC_quad_violin <- ggplot(dat, aes(y = PAPC)) +
+  
+  # **1. Add VIOLIN PLOT (mapped to the CATEGORICAL factor)**
+  # We use the factor(AssignedGroup) on the x-axis to group the distributions.
+  # Note: The fill is mapped to the factor to give distinct colors.
+  geom_violin(aes(x = factor(AssignedGroup), fill = factor(AssignedGroup)), 
+              trim = TRUE, alpha = 0.5) +
+  
+  # Optional: Add a boxplot or jittered points inside for mean/median/data spread
+  geom_boxplot(aes(x = factor(AssignedGroup)), width = 0.1, fill = "white", outlier.shape = NA) +
+  
+  # 2. Add the fitted quadratic curve
+  # Map the continuous numeric variable back to the x-axis for the curve.
+  geom_line(data = plot_data_pred_quad, 
+            aes(x = AssignedGroup_num, y = Predicted_PAPC), 
+            linewidth = 1.2, color = "darkred") +
+  
+  # **SET THE Y-AXIS LIMITS**
+  ylim(3, 7) + 
+  
+  labs(
+    title = "Quadratic Regression Curve Over PAPC Distribution by Group",
+    subtitle = "Violin plots show the frequency distribution of PAPC scores in each group.",
+    x = "Assigned Group (Factor Level)",
+    y = "PAPC Score",
+    fill = "Assigned Group"
+  ) +
+  # Since the violin plots use the factor, we change the scale for the labels
+  scale_x_discrete(labels = sort(unique(dat$AssignedGroup))) +
+  theme_minimal() +
+  theme(legend.position = "bottom") 
+
+print(plot_PAPC_quad_violin)
+```
+
+
+```{r}
+# Install the psych package if you don't have it (uncomment and run the line below)
+# install.packages("psych") 
+library(psych)
+
+# 1. Select the variables of interest from the 'dat' data frame
+vars_to_correlate <- dat[, c("AssignedGroup_num", "AICOP", "PAPC", "PAPC2", "CCP1_2", "CCP2_2", "CCP3_2")]
+
+# 2. Calculate the correlation matrix, p-values, and sample sizes (n)
+# use = "pairwise.complete.obs" ensures that cases with missing data on some variables 
+# are still used for pairs where both variables are present.
+corr_test_results <- corr.test(vars_to_correlate, use = "pairwise.complete.obs")
+
+# 3. Print the formatted correlation results with significance stars
+cat("\n============================================\n")
+cat("  Formatted Correlation Results (with stars)\n")
+cat("============================================\n")
+
+# The print.psych method provides the final clean output.
+# 'short=FALSE' shows the correlation (r), sample size (n), and p-value for each pair.
+print(corr_test_results, short = FALSE)
+```
+
+
+```{r}
+write.csv(dat, "dat_processed.csv", row.names = FALSE)
+```
