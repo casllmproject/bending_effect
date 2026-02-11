@@ -1,0 +1,372 @@
+---
+title: "p2"
+author: "yy_tw"
+date: "2025-12-04"
+output: html_document
+---
+
+```{r}
+# Load necessary libraries
+# If you do not have these installed, run: install.packages(c("tidyverse", "brms", "tidybayes", "modelr", "ggplot2"))
+library(tidyverse)
+library(brms)
+library(tidybayes)
+library(modelr)
+library(ggplot2)
+```
+
+```{r}
+# ==============================================================================
+# CHUNK 1: SETUP AND DATA PREPARATION
+# ==============================================================================
+
+# 1. Read the dataset
+dat <- read.csv("p2.csv")
+```
+
+```{r}
+# 2. Data Cleaning and Variable Types
+# Note: The prompt listed DR in hypotheses but did not specify the column name in Step 3.
+# I am assuming the column name is "DR". Please ensure this column exists in your CSV.
+
+# Handle missing data listwise (specifically for DQPD as requested)
+dat <- dat %>% drop_na(DQPD)
+
+# Define Variable Types
+dat <- dat %>%
+  mutate(
+    # Factorize Categorical Predictors
+    DISP = factor(DISP, levels = c(0, 1, 2, 3)), # Reference level is 0
+    DEM8 = factor(DEM8),
+    
+    # Ensure binary outcomes are numeric 0/1 for Bernoulli logic (though brms handles factors too)
+    POP = as.numeric(POP), 
+    WCCS = as.numeric(WCCS),
+    
+    # Ensure continuous variables are numeric
+    PAPA = as.numeric(PAPA),
+    WCCP = as.numeric(WCCP),
+    DQPD = as.numeric(DQPD), # treated as continuous 0-8
+    DR = as.numeric(DR),     # Assuming column name is DR
+    
+    # Controls
+    CCP1_1 = as.numeric(CCP1_1),
+    PEF = as.numeric(PEF),
+    NFC = as.numeric(NFC),
+    CII = as.numeric(CII)
+  )
+```
+
+```{r}
+# ==============================================================================
+# CHUNK 2: MODEL SPECIFICATION (BAYESIAN ESTIMATION)
+# ==============================================================================
+
+# Set weakly informative priors
+# Normal(0, 5) for coefficients is generally weak enough to let data speak
+# but constrains wild estimates.
+my_prior <- set_prior("normal(0, 5)", class = "b")
+
+# Control variable string for re-usability
+controls <- "DEM8 + CCP1_1 + PEF + NFC + CII"
+
+# --- Model 1: Mediator Model (H1) ---
+# PAPA ~ DISP + Controls
+f_med <- as.formula(paste("PAPA ~ DISP +", controls))
+
+m_papa <- brm(
+  formula = f_med,
+  data = dat,
+  family = gaussian(),
+  prior = my_prior,
+  chains = 4, iter = 2000, warmup = 1000, cores = 4, seed = 12345,
+  file = "model_papa" # Caches the model to save time on re-runs
+)
+
+# --- Model 2: Outcome Models (H2, H3, H6, H7) ---
+# Outcome ~ PAPA + PAPA^2 + DISP + Controls
+
+# 2a. Democratic Reciprocity (DR) - Continuous
+f_dr <- as.formula(paste("DR ~ PAPA + I(PAPA^2) + DISP +", controls))
+m_dr <- brm(
+  formula = f_dr,
+  data = dat,
+  family = gaussian(),
+  prior = my_prior,
+  chains = 4, iter = 2000, warmup = 1000, cores = 4, seed = 12345,
+  file = "model_dr"
+)
+
+# 2b. WCCP - Continuous
+f_wccp <- as.formula(paste("WCCP ~ PAPA + I(PAPA^2) + DISP +", controls))
+m_wccp <- brm(
+  formula = f_wccp,
+  data = dat,
+  family = gaussian(),
+  prior = my_prior,
+  chains = 4, iter = 2000, warmup = 1000, cores = 4, seed = 12345,
+  file = "model_wccp"
+)
+
+# 2c. WCCS - Binary (Logistic)
+f_wccs <- as.formula(paste("WCCS ~ PAPA + I(PAPA^2) + DISP +", controls))
+m_wccs <- brm(
+  formula = f_wccs,
+  data = dat,
+  family = bernoulli(link = "logit"),
+  prior = my_prior,
+  chains = 4, iter = 2000, warmup = 1000, cores = 4, seed = 12345,
+  file = "model_wccs"
+)
+
+# 2d. POP - Binary (Logistic)
+f_pop <- as.formula(paste("POP ~ PAPA + I(PAPA^2) + DISP +", controls))
+m_pop <- brm(
+  formula = f_pop,
+  data = dat,
+  family = bernoulli(link = "logit"),
+  prior = my_prior,
+  chains = 4, iter = 2000, warmup = 1000, cores = 4, seed = 12345,
+  file = "model_pop"
+)
+
+# 2e. DQPD - Range 0-8 (Treating as Gaussian per standard regression approach)
+f_dqpd <- as.formula(paste("DQPD ~ PAPA + I(PAPA^2) + DISP +", controls))
+m_dqpd <- brm(
+  formula = f_dqpd,
+  data = dat,
+  family = gaussian(),
+  prior = my_prior,
+  chains = 4, iter = 2000, warmup = 1000, cores = 4, seed = 12345,
+  file = "model_dqpd"
+)
+```
+
+```{r}
+# ==============================================================================
+# CHUNK 3: DIRECT HYPOTHESIS TESTING & CURVATURE SHAPE (H1, H2, H3, H6, H7)
+# ==============================================================================
+# Note: H6 and H7 are mediation hypotheses. The tests below for H6 and H7
+# verify the SHAPE (Curvature) of the relationship (Path b). 
+# The full mediation effect is quantified in Chunk 4.
+
+# Helper function to print hypothesis results based on HDI
+check_hypothesis <- function(model, parameter, hypothesis_name) {
+  post_summary <- posterior_summary(model, variable = parameter)
+  cat(paste0("\n--- ", hypothesis_name, " ---\n"))
+  print(post_summary[, c("Estimate", "Q2.5", "Q97.5")])
+  
+  lower <- post_summary[,"Q2.5"]
+  upper <- post_summary[,"Q97.5"]
+  
+  if (lower > 0) cat("Result: Supported (Positive Effect)\n")
+  else if (upper < 0) cat("Result: Supported (Negative Effect)\n")
+  else cat("Result: Not Supported (Includes Zero)\n")
+}
+
+# H1: DISP decreases PAPA
+# We check DISP1, DISP2, DISP3 against Reference (0)
+cat("\n=== H1: DISP -> PAPA ===\n")
+check_hypothesis(m_papa, "b_DISP1", "H1 (Level 1 vs 0)")
+check_hypothesis(m_papa, "b_DISP2", "H1 (Level 2 vs 0)")
+check_hypothesis(m_papa, "b_DISP3", "H1 (Level 3 vs 0)")
+
+# H2 & H6: PAPA -> DR, WCCP, WCCS 
+# H2: Positive Linear relationship
+# H6 (Shape): Concave curve (Negative Quadratic Term)
+cat("\n=== H2 & H6: PAPA -> DR, WCCP, WCCS (Shape Check) ===\n")
+# DR
+check_hypothesis(m_dr, "b_PAPA", "H2a (Linear PAPA -> DR)")
+check_hypothesis(m_dr, "b_IPAPAE2", "H6a (Quadratic/Concave Check for DR)")
+
+# WCCP
+check_hypothesis(m_wccp, "b_PAPA", "H2b (Linear PAPA -> WCCP)")
+check_hypothesis(m_wccp, "b_IPAPAE2", "H6b (Quadratic/Concave Check for WCCP)")
+
+# WCCS
+check_hypothesis(m_wccs, "b_PAPA", "H2c (Linear PAPA -> WCCS)")
+check_hypothesis(m_wccs, "b_IPAPAE2", "H6c (Quadratic/Concave Check for WCCS)")
+
+# H3 & H7: PAPA -> POP, DQPD
+# H3: Negative Linear relationship
+# H7 (Shape): Accelerating curve (Negative Quadratic Term)
+cat("\n=== H3 & H7: PAPA -> POP, DQPD (Shape Check) ===\n")
+# POP
+check_hypothesis(m_pop, "b_PAPA", "H3a (Linear PAPA -> POP)")
+check_hypothesis(m_pop, "b_IPAPAE2", "H7a (Quadratic/Accelerating Check for POP)")
+
+# DQPD
+check_hypothesis(m_dqpd, "b_PAPA", "H3b (Linear PAPA -> DQPD)")
+check_hypothesis(m_dqpd, "b_IPAPAE2", "H7b (Quadratic/Accelerating Check for DQPD)")
+```
+
+```{r}
+# ==============================================================================
+# CHUNK 4: INDIRECT EFFECTS (NIE) FOR MEDIATION (H4, H5, H6, H7)
+# ==============================================================================
+
+# Function to calculate NIE components (Total, Linear LP, Quadratic LP)
+# Total NIE is the overall mediation test (H4/H5).
+# Quadratic LP component tests the non-linear aspect (H6/H7).
+calculate_nie_components <- function(model_med, model_out, outcome_name, is_binary = FALSE) {
+  
+  # 1. Extract Posterior Samples
+  draws_med <- as_draws_df(model_med)
+  draws_out <- as_draws_df(model_out)
+  
+  n_draws <- min(nrow(draws_med), nrow(draws_out))
+  draws_med <- draws_med[1:n_draws, ]
+  draws_out <- draws_out[1:n_draws, ]
+  
+  # 2. Define Context for Mediation (Average person)
+  ref_data <- dat %>%
+    summarise(
+      DEM8 = factor(names(which.max(table(DEM8))), levels = levels(dat$DEM8)), 
+      CCP1_1 = mean(CCP1_1, na.rm=TRUE),
+      PEF = mean(PEF, na.rm=TRUE),
+      NFC = mean(NFC, na.rm=TRUE),
+      CII = mean(CII, na.rm=TRUE),
+      DISP = factor(0, levels = levels(dat$DISP)), # Placeholder
+      PAPA = mean(PAPA, na.rm=TRUE) # Placeholder
+    )
+  
+  # 3. Simulate Mediator (M) Values for DISP=0 and DISP=3
+  nd_0 <- ref_data; nd_0$DISP <- factor(0, levels = c(0,1,2,3))
+  m_pred_0 <- posterior_epred(model_med, newdata = nd_0) # M when X=0
+  
+  nd_1 <- ref_data; nd_1$DISP <- factor(3, levels = c(0,1,2,3))
+  m_pred_1 <- posterior_epred(model_med, newdata = nd_1) # M when X=3
+  
+  # 4. Decompose Indirect Effect (on Linear Predictor scale)
+  
+  # Extract Outcome Coefficients
+  b_papa <- draws_out$b_PAPA
+  b_papa2 <- draws_out$b_IPAPAE2
+  
+  # Linear Predictor contributions related to M change
+  lp_linear_0 <- b_papa * m_pred_0
+  lp_linear_1 <- b_papa * m_pred_1
+  
+  lp_quad_0 <- b_papa2 * (m_pred_0^2)
+  lp_quad_1 <- b_papa2 * (m_pred_1^2)
+  
+  # Components on LP scale (Log-Odds for binary, Raw Score for continuous)
+  delta_lp_L <- lp_linear_1 - lp_linear_0
+  delta_lp_Q <- lp_quad_1 - lp_quad_0
+  delta_lp_Total <- delta_lp_L + delta_lp_Q 
+  
+  # 5. Calculate Total NIE on the Outcome Scale (Probability for binary)
+  if (is_binary) {
+    # Get the "Base" linear predictor (Intercept + Controls + DISP=0)
+    nd_base <- nd_0; nd_base$PAPA <- 0
+    lp_base <- posterior_linpred(model_out, newdata = nd_base)
+    
+    # Total LP when M=M_0 (all parts of the outcome model)
+    total_lp_0 <- lp_base + lp_linear_0 + lp_quad_0
+    
+    # Total LP when M=M_1 (all parts of the outcome model)
+    total_lp_1 <- lp_base + lp_linear_1 + lp_quad_1
+    
+    # Convert to Probability scale: P(Y | M_1) - P(Y | M_0)
+    nie_total_dist <- plogis(total_lp_1) - plogis(total_lp_0)
+    
+  } else {
+    # Gaussian (Continuous): NIE is simply the total change in LP
+    nie_total_dist <- delta_lp_Total
+  }
+  
+  # 6. Summarize Function
+  summarize_dist <- function(dist, name) {
+    mean_val <- mean(dist)
+    ci_low <- quantile(dist, 0.025)
+    ci_high <- quantile(dist, 0.975)
+    
+    cat(paste0("  - ", name, "\n"))
+    cat(sprintf("    Estimate: %.3f\n    95%% CI: [%.3f, %.3f]\n", mean_val, ci_low, ci_high))
+    
+    # Check significance
+    if (ci_high < 0) cat("    Result: Significant Negative Effect (Supported)\n")
+    else if (ci_low > 0) cat("    Result: Significant Positive Effect (Supported)\n")
+    else cat("    Result: Not Significant (CI includes 0)\n")
+  }
+  
+  cat(paste0("\n--- Mediation for ", outcome_name, " ---\n"))
+  
+  # Total NIE (H4/H5 overall test)
+  summarize_dist(nie_total_dist, paste0("Total NIE (H4/H5) - (Scale: ", ifelse(is_binary, "Prob. Diff.", "Raw Diff."), ")"))
+  
+  # Linear Component (Comparing to H4/H5 linear path)
+  summarize_dist(delta_lp_L, "Linear LP Component (H4/H5 component) - (Scale: LP)")
+  
+  # Quadratic Component (H6/H7 primary test for curvature effect)
+  summarize_dist(delta_lp_Q, "Quadratic LP Component (H6/H7 component) - (Scale: LP)")
+}
+
+cat("\n=== Calculating Detailed Bayesian NIE Components (DISP 3 vs 0 via PAPA) ===\n")
+
+# H4 & H6 Outcomes
+calculate_nie_components(m_papa, m_dr, "Democratic Reciprocity (DR)", is_binary = FALSE)
+calculate_nie_components(m_papa, m_wccp, "Willingness to Participate (WCCP)", is_binary = FALSE)
+calculate_nie_components(m_papa, m_wccs, "Cross-Cut Sharing (WCCS)", is_binary = TRUE)
+
+# H5 & H7 Outcomes
+calculate_nie_components(m_papa, m_pop, "Polarization (POP)", is_binary = TRUE)
+calculate_nie_components(m_papa, m_dqpd, "Deliberative Quality (DQPD)", is_binary = FALSE)
+
+```
+
+```{r}
+# ==============================================================================
+# CHUNK 5: VISUALIZATION (H6, H7)
+# ==============================================================================
+
+plot_quadratic <- function(model, outcome_name, title) {
+  # Conditional effects plots the relationship of one variable while holding others constant
+  p <- conditional_effects(model, effects = "PAPA") 
+  
+  plot(p, plot = FALSE)[[1]] +
+    theme_minimal() +
+    labs(
+      title = title,
+      x = "Perceived Affordance of Perspective Alignment (PAPA)",
+      y = outcome_name
+    ) +
+    theme(plot.title = element_text(face = "bold"))
+}
+
+# Generate Plots
+p1 <- plot_quadratic(m_dr, "Democratic Reciprocity", "H6a: PAPA -> DR (Concave?)")
+p2 <- plot_quadratic(m_wccp, "Willingness to Participate", "H6b: PAPA -> WCCP (Concave?)")
+p3 <- plot_quadratic(m_wccs, "Prob. of Cross-Cut Sharing", "H6c: PAPA -> WCCS (Concave?)")
+p4 <- plot_quadratic(m_pop, "Prob. of Polarization", "H7a: PAPA -> POP (Accelerating?)")
+p5 <- plot_quadratic(m_dqpd, "Deliberative Quality", "H7b: PAPA -> DQPD (Accelerating?)")
+
+# Display Plots
+print(p1)
+print(p2)
+print(p3)
+print(p4)
+print(p5)
+```
+
+```{r}
+# ==============================================================================
+# CHUNK 6: APA STYLE REPORT GENERATION
+# ==============================================================================
+
+cat("\n======================================================\n")
+cat("APA STYLE REPORT SNIPPET\n")
+cat("======================================================\n")
+
+# Use these extracted values to fill in the text below
+print(fixef(m_dr))
+print(fixef(m_pop))
+```
+
+```{r}
+
+```
+
+
+
+
